@@ -46,6 +46,7 @@ swiftc \
     -import-objc-header "$INCLUDE_DIR/karukan_macos.h" \
     -L "$(dirname "$STATIC_LIB")" \
     -lkarukan_macos \
+    -lc++ \
     -framework Cocoa \
     -framework InputMethodKit \
     -framework SwiftUI \
