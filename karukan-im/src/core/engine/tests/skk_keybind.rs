@@ -131,10 +131,12 @@ fn test_skk_l_in_composing_switches_to_alphabet() {
     // State should be Empty after commit
     assert!(matches!(engine.state(), InputState::Empty));
     // Should have a Commit action with the composed text
-    assert!(result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(t) if t == "あ")));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "あ"))
+    );
 }
 
 #[test]
@@ -169,10 +171,12 @@ fn test_skk_q_in_composing_commits_katakana() {
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
     assert_eq!(engine.input_mode, InputMode::Hiragana);
-    assert!(result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(t) if t == "ア")));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "ア"))
+    );
 }
 
 #[test]
@@ -189,10 +193,12 @@ fn test_skk_l_in_composing_katakana_commits_katakana() {
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Alphabet);
     assert!(matches!(engine.state(), InputState::Empty));
-    assert!(result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(t) if t == "ア")));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "ア"))
+    );
 }
 
 #[test]
@@ -208,10 +214,12 @@ fn test_skk_ctrl_q_in_composing_commits_halfwidth_katakana() {
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
     assert_eq!(engine.input_mode, InputMode::Hiragana);
-    assert!(result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(t) if t == "ｱ")));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "ｱ"))
+    );
 }
 
 #[test]

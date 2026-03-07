@@ -76,7 +76,7 @@ pub fn vk_to_keysym(vk: u32, unicode_char: Option<char>) -> Keysym {
         // IME-specific keys
         0x15 => Keysym(0xff2a), // VK_KANJI / Hankaku/Zenkaku — mapped to Kanji keysym
         0x19 => Keysym(0xff23), // VK_KANJI (alternate) — Kana keysym
-        0x1C => Keysym::HENKAN,   // VK_CONVERT — 変換キー
+        0x1C => Keysym::HENKAN, // VK_CONVERT — 変換キー
         0x1D => Keysym::MUHENKAN, // VK_NONCONVERT — 無変換キー
 
         // Unknown key

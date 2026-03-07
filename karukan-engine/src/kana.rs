@@ -189,7 +189,10 @@ mod tests {
         // Handakuten (semi-voiced)
         assert_eq!(hiragana_to_halfwidth_katakana("ぱぴぷぺぽ"), "ﾊﾟﾋﾟﾌﾟﾍﾟﾎﾟ");
         // Small kana
-        assert_eq!(hiragana_to_halfwidth_katakana("ぁぃぅぇぉっゃゅょ"), "ｧｨｩｪｫｯｬｭｮ");
+        assert_eq!(
+            hiragana_to_halfwidth_katakana("ぁぃぅぇぉっゃゅょ"),
+            "ｧｨｩｪｫｯｬｭｮ"
+        );
         // Special
         assert_eq!(hiragana_to_halfwidth_katakana("ん"), "ﾝ");
         assert_eq!(hiragana_to_halfwidth_katakana("ー"), "ｰ");
