@@ -41,12 +41,8 @@ build() {
   # Build all Rust crates
   cargo build --release
 
-  # Restore makepkg flags for fcitx5 addon build
-  export CFLAGS="$_saved_cflags"
-  export CXXFLAGS="$_saved_cxxflags"
-  export LDFLAGS="$_saved_ldflags"
-
-  # Build fcitx5 addon
+  # Build fcitx5 addon (keep makepkg flags unset because cmake's custom
+  # target re-runs cargo, which would corrupt native libs with CFLAGS)
   cd karukan-im/fcitx5-addon
   cmake -B build -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build build -j
