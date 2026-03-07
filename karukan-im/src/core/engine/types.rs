@@ -2,7 +2,7 @@
 
 use karukan_engine::{Dictionary, KanaKanjiConverter, RomajiConverter};
 
-use crate::config::settings::StrategyMode;
+use crate::config::settings::{KeybindingProfile, StrategyMode};
 
 use super::super::candidate::CandidateList;
 use super::super::preedit::Preedit;
@@ -81,6 +81,8 @@ pub struct EngineConfig {
     pub max_latency_ms: u64,
     /// Conversion strategy mode (adaptive, light, main)
     pub strategy: StrategyMode,
+    /// Keybinding profile (default, skk)
+    pub keybinding_profile: KeybindingProfile,
 }
 
 impl Default for EngineConfig {
@@ -93,6 +95,7 @@ impl Default for EngineConfig {
             beam_width: 3,
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
+            keybinding_profile: KeybindingProfile::default(),
         }
     }
 }
@@ -114,6 +117,8 @@ pub(crate) enum InputMode {
     Hiragana,
     /// Katakana mode — preedit displays katakana instead of hiragana
     Katakana,
+    /// Half-width katakana mode — preedit displays half-width katakana
+    HalfWidthKatakana,
     /// Alphabet (direct input) mode — characters bypass romaji conversion
     Alphabet,
 }

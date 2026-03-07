@@ -23,9 +23,11 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Run auto-suggest (skip in alphabet mode — no hiragana to convert)
-        let candidates =
-            if self.input_mode != InputMode::Alphabet && !self.input_buf.text.is_empty() {
+        // Run auto-suggest (skip in alphabet/halfwidth-katakana modes — no hiragana to convert)
+        let candidates = if self.input_mode != InputMode::Alphabet
+            && self.input_mode != InputMode::HalfWidthKatakana
+            && !self.input_buf.text.is_empty()
+        {
                 let reading = self.input_buf.text.clone();
                 let result = self.run_auto_suggest(&reading, 1);
                 if !result.is_empty() && result[0] != self.input_buf.text {
@@ -59,7 +61,10 @@ impl InputMethodEngine {
         };
 
         // Live conversion mode: show converted text in preedit
-        if self.live.enabled && self.input_mode != InputMode::Katakana {
+        if self.live.enabled
+            && self.input_mode != InputMode::Katakana
+            && self.input_mode != InputMode::HalfWidthKatakana
+        {
             self.live.text = candidates[0].clone();
             let preedit = self.set_composing_state();
             let mut result =
@@ -330,6 +335,9 @@ impl InputMethodEngine {
         let text = if self.input_mode == InputMode::Katakana {
             // Katakana mode always commits katakana, ignoring live conversion
             Self::hiragana_to_katakana(&reading)
+        } else if self.input_mode == InputMode::HalfWidthKatakana {
+            // Half-width katakana mode always commits half-width katakana
+            karukan_engine::kana::hiragana_to_halfwidth_katakana(&reading)
         } else if !self.live.text.is_empty() {
             // Live conversion active: commit converted text
             self.live.text.clone()

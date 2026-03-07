@@ -9,6 +9,7 @@ mod display;
 mod init;
 mod input;
 mod input_buffer;
+mod keybind;
 mod mode;
 mod strategy;
 mod types;
@@ -232,6 +233,15 @@ impl InputMethodEngine {
         }
     }
 
+    /// Convert hiragana in input_buf to half-width katakana permanently.
+    /// Called when leaving HalfWidthKatakana mode so the preedit doesn't revert.
+    fn bake_halfwidth_katakana(&mut self) {
+        if !self.input_buf.text.is_empty() {
+            self.input_buf.text =
+                karukan_engine::kana::hiragana_to_halfwidth_katakana(&self.input_buf.text);
+        }
+    }
+
     /// Flush the romaji buffer and insert result at cursor position
     fn flush_romaji_to_composed(&mut self) {
         if self.converters.romaji.buffer().is_empty() {
@@ -320,6 +330,9 @@ impl InputMethodEngine {
             if self.input_mode == InputMode::Katakana {
                 self.bake_katakana();
             }
+            if self.input_mode == InputMode::HalfWidthKatakana {
+                self.bake_halfwidth_katakana();
+            }
             self.input_mode = InputMode::Hiragana;
             self.flush_romaji_to_composed();
             let aux = self.format_aux_composing();
@@ -367,6 +380,11 @@ impl InputMethodEngine {
             && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
         {
             return self.toggle_live_conversion();
+        }
+
+        // SKK keybinding pre-processing
+        if let Some(result) = self.handle_skk_keybind(key) {
+            return result;
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)
