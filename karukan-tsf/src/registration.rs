@@ -114,21 +114,20 @@ pub fn register_server() -> windows::core::Result<()> {
             LANGID_JAPANESE,
             &GUID_KARUKAN_PROFILE,
             &windows::core::HSTRING::from("karukan"),
-            std::ptr::null(),  // icon file (none)
-            0,                 // icon index
-            std::ptr::null(),  // HKL (none)
-            0,                 // description (none)
-            0,                 // flags
-            true,              // enable
+            std::ptr::null(), // icon file (none)
+            0,                // icon index
+            std::ptr::null(), // HKL (none)
+            0,                // description (none)
+            0,                // flags
+            true,             // enable
         )?;
 
         // Register category
-        let cat_mgr: ITfCategoryMgr =
-            windows::Win32::System::Com::CoCreateInstance(
-                &CLSID_TF_CategoryMgr,
-                None,
-                windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
-            )?;
+        let cat_mgr: ITfCategoryMgr = windows::Win32::System::Com::CoCreateInstance(
+            &CLSID_TF_CategoryMgr,
+            None,
+            windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
+        )?;
 
         cat_mgr.RegisterCategory(
             &CLSID_KARUKAN_TEXT_SERVICE,
@@ -155,14 +154,13 @@ pub fn unregister_server() -> windows::core::Result<()> {
 
     // Unregister TSF profile
     unsafe {
-        if let Ok(profile_mgr) = windows::Win32::System::Com::CoCreateInstance::<
-            _,
-            ITfInputProcessorProfileMgr,
-        >(
-            &CLSID_TF_InputProcessorProfiles,
-            None,
-            windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
-        ) {
+        if let Ok(profile_mgr) =
+            windows::Win32::System::Com::CoCreateInstance::<_, ITfInputProcessorProfileMgr>(
+                &CLSID_TF_InputProcessorProfiles,
+                None,
+                windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
+            )
+        {
             let _ = profile_mgr.UnregisterProfile(
                 &CLSID_KARUKAN_TEXT_SERVICE,
                 LANGID_JAPANESE,
@@ -197,10 +195,7 @@ pub fn unregister_server() -> windows::core::Result<()> {
             &windows::core::HSTRING::from(&inproc_path),
         );
         let key_path = format!("CLSID\\{}", clsid_str);
-        let _ = RegDeleteKeyW(
-            HKEY_CLASSES_ROOT,
-            &windows::core::HSTRING::from(&key_path),
-        );
+        let _ = RegDeleteKeyW(HKEY_CLASSES_ROOT, &windows::core::HSTRING::from(&key_path));
     }
 
     Ok(())
@@ -209,10 +204,7 @@ pub fn unregister_server() -> windows::core::Result<()> {
 /// Get the full path of the current DLL module.
 #[cfg(target_os = "windows")]
 fn get_dll_path() -> windows::core::Result<String> {
-    let hmodule = DLL_INSTANCE
-        .get()
-        .copied()
-        .unwrap_or(HMODULE::default());
+    let hmodule = DLL_INSTANCE.get().copied().unwrap_or(HMODULE::default());
     let mut buf = [0u16; 260];
     let len = unsafe { GetModuleFileNameW(Some(hmodule), &mut buf) } as usize;
     Ok(String::from_utf16_lossy(&buf[..len]))

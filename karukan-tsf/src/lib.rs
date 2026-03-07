@@ -83,11 +83,7 @@ mod dll_exports {
     /// COM entry point — checks if the DLL can be unloaded.
     #[unsafe(no_mangle)]
     extern "system" fn DllCanUnloadNow() -> HRESULT {
-        if dll_can_unload() {
-            S_OK
-        } else {
-            S_FALSE
-        }
+        if dll_can_unload() { S_OK } else { S_FALSE }
     }
 
     /// COM entry point — registers the text service.

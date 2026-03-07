@@ -4,11 +4,6 @@
 //! near the text cursor position. Uses GDI for rendering.
 
 #[cfg(target_os = "windows")]
-use std::sync::Mutex;
-
-#[cfg(target_os = "windows")]
-use once_cell::sync::Lazy;
-#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::*;
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::*;
@@ -41,10 +36,6 @@ impl Default for CandidateRenderData {
     }
 }
 
-#[cfg(target_os = "windows")]
-static RENDER_DATA: Lazy<Mutex<CandidateRenderData>> =
-    Lazy::new(|| Mutex::new(CandidateRenderData::default()));
-
 /// Candidate window for displaying conversion candidates.
 #[cfg(target_os = "windows")]
 pub struct CandidateWindow {
@@ -54,9 +45,20 @@ pub struct CandidateWindow {
 #[cfg(target_os = "windows")]
 impl CandidateWindow {
     /// Create a new candidate window (hidden by default).
+    ///
+    /// Render data is stored per-window via `GWLP_USERDATA` (no global static).
     pub fn new() -> Self {
         register_window_class();
         let hwnd = create_candidate_window();
+
+        // Allocate per-instance render data and attach to the window
+        if hwnd.0 as usize != 0 {
+            let data = Box::new(CandidateRenderData::default());
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(data) as isize);
+            }
+        }
+
         Self { hwnd }
     }
 
@@ -66,9 +68,12 @@ impl CandidateWindow {
             return;
         }
 
-        if let Ok(mut data) = RENDER_DATA.lock() {
-            data.candidates = candidates.to_vec();
-            data.selected = selected;
+        unsafe {
+            let ptr = GetWindowLongPtrW(self.hwnd, GWLP_USERDATA) as *mut CandidateRenderData;
+            if !ptr.is_null() {
+                (*ptr).candidates = candidates.to_vec();
+                (*ptr).selected = selected;
+            }
         }
 
         let count = candidates.len().max(1) as i32;
@@ -102,13 +107,15 @@ impl CandidateWindow {
 
     /// Update the selected candidate index.
     pub fn set_selected(&mut self, index: usize) {
-        if let Ok(mut data) = RENDER_DATA.lock() {
-            data.selected = index;
+        if self.hwnd.0 as usize == 0 {
+            return;
         }
-        if self.hwnd.0 as usize != 0 {
-            unsafe {
-                let _ = InvalidateRect(self.hwnd, None, true);
+        unsafe {
+            let ptr = GetWindowLongPtrW(self.hwnd, GWLP_USERDATA) as *mut CandidateRenderData;
+            if !ptr.is_null() {
+                (*ptr).selected = index;
             }
+            let _ = InvalidateRect(self.hwnd, None, true);
         }
     }
 
@@ -130,10 +137,16 @@ impl CandidateWindow {
         }
     }
 
-    /// Destroy the window.
+    /// Destroy the window and free the per-instance render data.
     pub fn destroy(&mut self) {
         if self.hwnd.0 as usize != 0 {
             unsafe {
+                // Reclaim and drop the per-instance render data
+                let ptr = GetWindowLongPtrW(self.hwnd, GWLP_USERDATA) as *mut CandidateRenderData;
+                if !ptr.is_null() {
+                    SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
+                    let _ = Box::from_raw(ptr);
+                }
                 let _ = DestroyWindow(self.hwnd);
             }
             self.hwnd = HWND::default();
@@ -217,7 +230,9 @@ unsafe fn paint_candidates(hwnd: HWND) {
     let mut ps = PAINTSTRUCT::default();
     let hdc = BeginPaint(hwnd, &mut ps);
 
-    if let Ok(data) = RENDER_DATA.lock() {
+    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateRenderData;
+    if !ptr.is_null() {
+        let data = &*ptr;
         let _ = SetBkMode(hdc, TRANSPARENT);
 
         // Highlight color for selected item

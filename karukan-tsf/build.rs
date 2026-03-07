@@ -5,10 +5,7 @@ fn main() {
         let def_path = std::path::Path::new("karukan-tsf.def")
             .canonicalize()
             .expect("karukan-tsf.def not found");
-        println!(
-            "cargo:rustc-cdylib-link-arg=/DEF:{}",
-            def_path.display()
-        );
+        println!("cargo:rustc-cdylib-link-arg=/DEF:{}", def_path.display());
 
         // Compile .rc resource file (version info, icon)
         if std::path::Path::new("res/karukan.rc").exists() {

@@ -7,25 +7,19 @@ use crate::tsf::text_input_processor::KarukanTextService;
 
 impl ITfThreadMgrEventSink_Impl for KarukanTextService_Impl {
     /// Called when a document (context) gets focus.
-    fn OnInitDocumentMgr(
-        &self,
-        _pdim: Option<&ITfDocumentMgr>,
-    ) -> Result<()> {
+    fn OnInitDocumentMgr(&self, _pdim: Option<&ITfDocumentMgr>) -> Result<()> {
         Ok(())
     }
 
     /// Called when a document manager is being removed.
-    fn OnUninitDocumentMgr(
-        &self,
-        _pdim: Option<&ITfDocumentMgr>,
-    ) -> Result<()> {
+    fn OnUninitDocumentMgr(&self, _pdim: Option<&ITfDocumentMgr>) -> Result<()> {
         Ok(())
     }
 
     /// Called when focus changes to a new document.
     fn OnSetFocus(
         &self,
-        _pdimfocus: Option<&ITfDocumentMgr>,
+        pdimfocus: Option<&ITfDocumentMgr>,
         _pdimprevfocus: Option<&ITfDocumentMgr>,
     ) -> Result<()> {
         let mut inner = self.inner.borrow_mut();
@@ -35,31 +29,38 @@ impl ITfThreadMgrEventSink_Impl for KarukanTextService_Impl {
         inner.cached_result = None;
         inner.composition = None;
 
-        // Clear surrounding context (actual text reading requires an edit session;
-        // for now we just clear it to avoid stale context from the previous document)
-        inner.engine.set_surrounding_context("", "");
-
         // Hide candidate window
         if let Some(ref cw) = inner.candidate_window {
             cw.borrow_mut().hide();
         }
 
+        // Read surrounding context from the new document
+        if let Some(doc_mgr) = pdimfocus {
+            let client_id = inner.client_id;
+            // Get the top context from the document manager
+            unsafe {
+                if let Ok(context) = doc_mgr.GetTop() {
+                    let (left, right) =
+                        crate::tsf::context_reader::read_context(&context, client_id);
+                    inner.engine.set_surrounding_context(&left, &right);
+                    return Ok(());
+                }
+            }
+        }
+
+        // Fallback: clear surrounding context
+        inner.engine.set_surrounding_context("", "");
+
         Ok(())
     }
 
     /// Called when a context is pushed onto the document manager.
-    fn OnPushContext(
-        &self,
-        _pic: Option<&ITfContext>,
-    ) -> Result<()> {
+    fn OnPushContext(&self, _pic: Option<&ITfContext>) -> Result<()> {
         Ok(())
     }
 
     /// Called when a context is popped from the document manager.
-    fn OnPopContext(
-        &self,
-        _pic: Option<&ITfContext>,
-    ) -> Result<()> {
+    fn OnPopContext(&self, _pic: Option<&ITfContext>) -> Result<()> {
         Ok(())
     }
 }

@@ -11,9 +11,7 @@ use crate::tsf::text_input_processor::KarukanTextService;
 
 impl ITfDisplayAttributeProvider_Impl for KarukanTextService_Impl {
     /// Return an enumerator of display attributes.
-    fn EnumDisplayAttributeInfo(
-        &self,
-    ) -> Result<IEnumTfDisplayAttributeInfo> {
+    fn EnumDisplayAttributeInfo(&self) -> Result<IEnumTfDisplayAttributeInfo> {
         let attrs: Vec<ITfDisplayAttributeInfo> = vec![
             KarukanInputAttribute.into(),
             KarukanConvertedAttribute.into(),
@@ -22,10 +20,7 @@ impl ITfDisplayAttributeProvider_Impl for KarukanTextService_Impl {
     }
 
     /// Get a display attribute by GUID.
-    fn GetDisplayAttributeInfo(
-        &self,
-        guid: *const GUID,
-    ) -> Result<ITfDisplayAttributeInfo> {
+    fn GetDisplayAttributeInfo(&self, guid: *const GUID) -> Result<ITfDisplayAttributeInfo> {
         unsafe {
             if guid.is_null() {
                 return Err(E_INVALIDARG.into());
@@ -163,11 +158,7 @@ impl IEnumTfDisplayAttributeInfo_Impl for KarukanDisplayAttributeEnum_Impl {
         Ok(cloned.into())
     }
 
-    fn Next(
-        &self,
-        rginfo: &mut [Option<ITfDisplayAttributeInfo>],
-        pcfetched: *mut u32,
-    ) -> HRESULT {
+    fn Next(&self, rginfo: &mut [Option<ITfDisplayAttributeInfo>], pcfetched: *mut u32) -> HRESULT {
         let mut fetched = 0u32;
         let idx = self.index.get();
 

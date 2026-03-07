@@ -112,7 +112,7 @@ pub(in crate::core) struct Converters {
 
 /// Input mode for the IME engine
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputMode {
+pub enum InputMode {
     /// Hiragana mode (default) — romaji is converted to hiragana
     Hiragana,
     /// Katakana mode — preedit displays katakana instead of hiragana

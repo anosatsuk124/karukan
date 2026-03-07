@@ -11,6 +11,7 @@ use karukan_im::EngineAction;
 
 use crate::globals::GUID_PRESERVED_KEY_ONOFF;
 use crate::tsf::edit_session::ActionEditSession;
+use crate::tsf::lang_bar::KarukanLangBarButton;
 use crate::tsf::text_input_processor::KarukanTextService;
 
 impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
@@ -43,10 +44,9 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
             let unicode_char = vk_to_unicode(vk, shift);
 
             let mut inner = self.inner.borrow_mut();
-            let result =
-                inner
-                    .engine
-                    .process_key(vk, unicode_char, shift, control, alt, win, true);
+            let result = inner
+                .engine
+                .process_key(vk, unicode_char, shift, control, alt, win, true);
 
             let consumed = result.consumed;
             inner.cached_result = Some(result);
@@ -78,6 +78,10 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                     if let Some(context) = pic {
                         drop(inner); // Release borrow before edit session
                         apply_engine_actions(self, context, &result.actions)?;
+
+                        // Check for mode changes and update language bar
+                        update_lang_bar_if_mode_changed(self);
+
                         *pfeaten = TRUE;
                         return Ok(());
                     }
@@ -153,6 +157,25 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                         cw.borrow_mut().hide();
                     }
                 }
+
+                // Sync compartment state
+                if let Some(ref thread_mgr) = inner.thread_mgr {
+                    let _ = crate::tsf::compartment::set_openclose_state(
+                        thread_mgr,
+                        inner.client_id,
+                        inner.enabled,
+                    );
+                }
+
+                // Update language bar
+                if let Some(ref item) = inner.lang_bar_item {
+                    let button: Result<&KarukanLangBarButton> =
+                        windows::core::AsImpl::as_impl(item);
+                    if let Ok(button) = button {
+                        button.update_mode(inner.engine.input_mode(), inner.enabled);
+                    }
+                }
+
                 tracing::debug!("IME toggle: enabled={}", inner.enabled);
                 *pfeaten = TRUE;
             } else {
@@ -269,6 +292,26 @@ fn apply_engine_actions(
 
     Ok(())
 }
+
+/// Check if the engine's input mode changed since the last key event,
+/// and update the language bar if so.
+#[cfg(target_os = "windows")]
+fn update_lang_bar_if_mode_changed(service: &KarukanTextService_Impl) {
+    let mut inner = service.inner.borrow_mut();
+    let current_mode = inner.engine.input_mode();
+    if current_mode != inner.prev_input_mode {
+        inner.prev_input_mode = current_mode;
+        if let Some(ref item) = inner.lang_bar_item {
+            let button: Result<&KarukanLangBarButton> = windows::core::AsImpl::as_impl(item);
+            if let Ok(button) = button {
+                button.update_mode(current_mode, inner.enabled);
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn update_lang_bar_if_mode_changed(_service: &KarukanTextService_Impl) {}
 
 #[cfg(not(target_os = "windows"))]
 fn apply_engine_actions(

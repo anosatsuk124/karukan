@@ -167,6 +167,11 @@ impl InputMethodEngine {
         }
     }
 
+    /// Get the current input mode (Hiragana, Katakana, Alphabet, etc.)
+    pub fn input_mode(&self) -> InputMode {
+        self.input_mode
+    }
+
     /// Get the current state
     pub fn state(&self) -> &InputState {
         &self.state
