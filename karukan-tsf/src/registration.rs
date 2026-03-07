@@ -4,7 +4,7 @@
 //! Called from DllRegisterServer/DllUnregisterServer.
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::HMODULE;
+use windows::Win32::Foundation::{BOOL, HMODULE};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::LibraryLoader::GetModuleFileNameW;
 #[cfg(target_os = "windows")]
@@ -113,8 +113,8 @@ pub fn register_server() -> windows::core::Result<()> {
             0,              // icon index
             HKL::default(), // HKL (none)
             0,              // description (none)
-            0,              // flags
-            0,              // enable
+            BOOL(0),        // flags
+            BOOL(0),        // enable
         )?;
 
         // Register category
