@@ -115,7 +115,7 @@ impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
             let desc_wide: Vec<u16> = desc.encode_utf16().collect();
             let len = desc_wide.len().min(info.szDescription.len() - 1);
             info.szDescription[..len]
-                .copy_from_slice(&desc_wide[..len].iter().copied().collect::<Vec<u16>>());
+                .copy_from_slice(&desc_wide[..len]);
             info.szDescription[len] = 0;
         }
         Ok(())
