@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-karukan is a cross-platform Japanese Input Method system consisting of four Rust crates:
+karukan is a cross-platform Japanese Input Method system consisting of multiple Rust crates:
 
 - **karukan-engine**: Core library — romaji-to-hiragana conversion, neural kana-kanji conversion via llama.cpp, system dictionary, learning cache
 - **karukan-cli**: CLI tools and server — dictionary builder, Sudachi converter, dict viewer, AJIMEE-Bench, HTTP API server
-- **karukan-im**: fcitx5 IME addon using karukan-engine for Japanese input on Linux
-- **karukan-tsf**: Windows TSF (Text Services Framework) IME addon using karukan-engine for Japanese input on Windows
+- **karukan-im**: Shared IME engine core — state machine, preedit, candidate list, key handling (used by platform addons)
+- **karukan-macos**: macOS IMKit input method addon using karukan-im/karukan-engine
+- **karukan-tsf**: Windows TSF input method addon using karukan-im/karukan-engine
 
 ## Build and Development Commands
 
@@ -68,6 +69,18 @@ sudo cmake --install build
 cmake -B build -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build build -j
 cmake --install build
+```
+
+### karukan-macos
+
+```bash
+cargo build -p karukan-macos --release
+cargo test -p karukan-macos
+
+# Build and install macOS Input Method
+cd karukan-macos
+scripts/build.sh         # cargo build + swiftc + .app bundle
+scripts/install.sh       # Copy to ~/Library/Input Methods/
 ```
 
 ### karukan-tsf (Windows)
@@ -137,6 +150,16 @@ cargo clippy --workspace  # Lint all crates
 - `config/settings.rs` — User settings (`~/.config/karukan-im/config.toml`)
 - `ffi.rs` — C FFI for fcitx5 C++ addon
 - `fcitx5-addon/src/karukan.cpp` — C++ fcitx5 wrapper
+
+### karukan-macos (`karukan-macos/src/`)
+
+- `lib.rs` — Library entry point with macOS cfg guard
+- `engine_bridge.rs` — EngineBridge wrapper (same pattern as karukan-tsf)
+- `keymap.rs` — macOS Carbon key code → Keysym mapping
+- `ffi.rs` — C FFI for Swift IMKit integration
+- `swift/KarukanInputMethod/` — Swift IMKit app (IMKInputController, candidate window, settings)
+- `include/karukan_macos.h` — C FFI header
+- `scripts/` — Build and install scripts
 
 ### karukan-tsf (`karukan-tsf/src/`)
 
