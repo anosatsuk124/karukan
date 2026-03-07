@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod core;
+#[cfg(not(target_os = "windows"))]
 pub mod ffi;
 
 pub use core::engine::{EngineAction, EngineResult, InputMethodEngine};
