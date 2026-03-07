@@ -51,9 +51,19 @@ pub const GUID_LANGBAR_ITEM_BUTTON: GUID =
 /// Japanese language ID (LANGID 0x0411 = Japanese)
 pub const LANGID_JAPANESE: u16 = 0x0411;
 
+/// Newtype wrapper around HMODULE to implement Send + Sync.
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+pub struct SyncHmodule(pub HMODULE);
+
+#[cfg(target_os = "windows")]
+unsafe impl Send for SyncHmodule {}
+#[cfg(target_os = "windows")]
+unsafe impl Sync for SyncHmodule {}
+
 /// DLL module handle, set during DllMain.
 #[cfg(target_os = "windows")]
-pub static DLL_INSTANCE: OnceCell<HMODULE> = OnceCell::new();
+pub static DLL_INSTANCE: OnceCell<SyncHmodule> = OnceCell::new();
 
 /// Global reference count for COM objects (used by DllCanUnloadNow).
 #[cfg(target_os = "windows")]

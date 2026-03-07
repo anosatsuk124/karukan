@@ -158,16 +158,23 @@ impl IEnumTfDisplayAttributeInfo_Impl for KarukanDisplayAttributeEnum_Impl {
         Ok(cloned.into())
     }
 
-    fn Next(&self, rginfo: &mut [Option<ITfDisplayAttributeInfo>], pcfetched: *mut u32) -> HRESULT {
+    fn Next(
+        &self,
+        celt: u32,
+        rginfo: *mut Option<ITfDisplayAttributeInfo>,
+        pcfetched: *mut u32,
+    ) -> Result<()> {
         let mut fetched = 0u32;
         let idx = self.index.get();
 
-        for (i, slot) in rginfo.iter_mut().enumerate() {
+        for i in 0..celt as usize {
             let pos = idx + i;
             if pos >= self.attrs.len() {
                 break;
             }
-            *slot = Some(self.attrs[pos].clone());
+            unsafe {
+                rginfo.add(i).write(Some(self.attrs[pos].clone()));
+            }
             fetched += 1;
         }
 
@@ -179,10 +186,10 @@ impl IEnumTfDisplayAttributeInfo_Impl for KarukanDisplayAttributeEnum_Impl {
             }
         }
 
-        if fetched as usize == rginfo.len() {
-            S_OK
+        if fetched == celt {
+            Ok(())
         } else {
-            S_FALSE
+            Err(S_FALSE.into())
         }
     }
 

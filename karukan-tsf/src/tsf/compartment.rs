@@ -4,7 +4,6 @@
 //! `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE` compartment, which tracks
 //! whether the IME is "open" (active) or "closed" (passthrough).
 
-use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 

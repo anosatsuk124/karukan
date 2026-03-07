@@ -130,7 +130,7 @@ impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
 
 // ITfLangBarItemButton implementation
 impl ITfLangBarItemButton_Impl for KarukanLangBarButton_Impl {
-    fn OnClick(&self, _click: TfLBIClick, _pt: POINT, _prcarea: *const RECT) -> Result<()> {
+    fn OnClick(&self, _click: TfLBIClick, _pt: &POINT, _prcarea: *const RECT) -> Result<()> {
         let inner = self.inner.borrow();
         if let Some(ref callback) = inner.toggle_callback {
             callback();

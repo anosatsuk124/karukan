@@ -1,6 +1,5 @@
 //! ITfCompositionSink implementation — handles composition lifecycle events.
 
-use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 

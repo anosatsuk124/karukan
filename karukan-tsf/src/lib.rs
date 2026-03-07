@@ -27,10 +27,11 @@ pub mod candidate;
 #[cfg(target_os = "windows")]
 mod dll_exports {
     use windows::Win32::Foundation::*;
-    use windows::Win32::System::SystemServices::*;
     use windows::core::*;
 
     use crate::globals::*;
+
+    const DLL_PROCESS_ATTACH: u32 = 1;
     use crate::tsf::class_factory::KarukanClassFactory;
 
     /// DLL entry point — saves the module handle.
@@ -41,7 +42,7 @@ mod dll_exports {
         _reserved: *mut core::ffi::c_void,
     ) -> BOOL {
         if reason == DLL_PROCESS_ATTACH {
-            let _ = DLL_INSTANCE.set(HMODULE(hinstance.0));
+            let _ = DLL_INSTANCE.set(SyncHmodule(HMODULE(hinstance.0)));
 
             // Initialize logging
             tracing_subscriber::fmt()
