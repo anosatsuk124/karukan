@@ -1,10 +1,11 @@
 <div align="center">
   <img src="icon.png" width="128" alt="karukan" />
   <h1>Karukan</h1>
-  <p>日本語入力システム — ニューラルかな漢字変換エンジン + fcitx5 / Windows TSF</p>
+  <p>日本語入力システム — ニューラルかな漢字変換エンジン + fcitx5 / Windows TSF / macOS IMKit</p>
 
   [![CI (engine)](https://github.com/togatoga/karukan/actions/workflows/karukan-engine-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-engine-ci.yml)
   [![CI (im)](https://github.com/togatoga/karukan/actions/workflows/karukan-im-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-im-ci.yml)
+  [![CI (macos)](https://github.com/togatoga/karukan/actions/workflows/karukan-macos-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-macos-ci.yml)
   [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 </div>
 
@@ -18,6 +19,7 @@
 |---------|------|
 | [karukan-im](karukan-im/) | karukan-engineを利用したfcitx5向け日本語入力システム (Linux) |
 | [karukan-tsf](karukan-tsf/) | karukan-engineを利用したTSF (Text Services Framework) 向け日本語入力システム (Windows) |
+| [karukan-macos](karukan-macos/) | karukan-engineを利用したIMKit向け日本語入力システム (macOS) |
 | [karukan-engine](karukan-engine/) | コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換 |
 | [karukan-cli](karukan-cli/) | CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー |
 
@@ -34,6 +36,7 @@
 
 - **Linux (fcitx5)**: [karukan-im の README](karukan-im/README.md#install) を参照
 - **Windows (TSF)**: [karukan-tsf の README](karukan-tsf/README.md#build) を参照
+- **macOS (IMKit)**: [karukan-macos の README](karukan-macos/README.md) を参照
 
 ## ライセンス
 
