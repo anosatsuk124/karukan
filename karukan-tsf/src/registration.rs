@@ -113,7 +113,7 @@ pub fn register_server() -> windows::core::Result<()> {
             0,              // icon index
             HKL::default(), // HKL (none)
             0,              // description (none)
-            FALSE,          // flags
+            0,              // flags
             0,              // enable
         )?;
 

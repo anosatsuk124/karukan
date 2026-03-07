@@ -321,7 +321,8 @@ impl ITfCompartmentEventSink_Impl for KarukanTextService_Impl {
 
                     // Update language bar
                     if let Some(ref item) = inner.lang_bar_item {
-                        let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
+                        let button: &KarukanLangBarButton =
+                            unsafe { windows::core::AsImpl::as_impl(item) };
                         button.update_mode(inner.engine.input_mode(), inner.enabled);
                     }
 
