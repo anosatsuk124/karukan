@@ -76,7 +76,9 @@ cmake --install build
 # Cross-compile from Linux (requires mingw-w64 toolchain)
 cargo build -p karukan-tsf --release --target x86_64-pc-windows-gnu
 
-# Native build on Windows
+# Native build on Windows (MSVC)
+# Set CMAKE_MSVC_RUNTIME_LIBRARY to align llama.cpp (CMake) with Rust's default static CRT
+set CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 cargo build -p karukan-tsf --release
 ```
 

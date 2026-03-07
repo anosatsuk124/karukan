@@ -32,7 +32,8 @@
 
 ## インストール
 
-インストール方法は [karukan-im の README](karukan-im/README.md#install) を参照してください。
+- **Linux (fcitx5)**: [karukan-im の README](karukan-im/README.md#install) を参照
+- **Windows (TSF)**: [karukan-tsf の README](karukan-tsf/README.md#build) を参照
 
 ## ライセンス
 
