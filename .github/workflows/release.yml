@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-macos:
+    name: Build macOS .app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Build .app bundle
+        run: |
+          cd karukan-macos
+          bash scripts/build.sh arm64
+      - name: Verify .app bundle
+        run: |
+          test -d karukan-macos/build/Karukan.app/Contents/MacOS/KarukanInputMethod
+          codesign --verify karukan-macos/build/Karukan.app
+      - name: Package .app
+        run: |
+          cd karukan-macos/build
+          ditto -c -k --keepParent Karukan.app Karukan-macos-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Karukan-macos-arm64
+          path: karukan-macos/build/Karukan-macos-arm64.zip
+
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    env:
+      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Build release DLL
+        run: cargo build -p karukan-tsf --release
+      - name: Build NSIS installer
+        run: |
+          copy target\release\karukan_tsf.dll karukan-tsf\installer\
+          makensis /DVERSION=${{ github.ref_name }} karukan-tsf\installer\karukan-installer.nsi
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Karukan-windows-x86_64
+          path: karukan-tsf/installer/Karukan-Setup-*.exe
+
+  release:
+    name: Create Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/Karukan-macos-arm64/Karukan-macos-arm64.zip
+            artifacts/Karukan-windows-x86_64/Karukan-Setup-*.exe
