@@ -20,6 +20,11 @@ impl InputMethodEngine {
             return None;
         }
 
+        // SKK mode does not use Henkan/Muhenkan keys — pass them through
+        if matches!(key.keysym, Keysym::HENKAN | Keysym::MUHENKAN) {
+            return Some(EngineResult::not_consumed());
+        }
+
         // Ctrl+j → enter hiragana mode (from any mode)
         if key.modifiers.control_key
             && !key.modifiers.shift_key
@@ -33,16 +38,7 @@ impl InputMethodEngine {
             return None;
         }
 
-        // Shift+Ctrl+q → convert to half-width katakana and commit (must be before Ctrl+q)
-        if key.modifiers.control_key
-            && key.modifiers.shift_key
-            && (key.keysym == Keysym::KEY_Q || key.keysym == Keysym::KEY_Q_UPPER)
-            && matches!(self.state, InputState::Composing { .. })
-        {
-            return Some(self.skk_commit_as_halfwidth_katakana());
-        }
-
-        // Ctrl+q → enter half-width katakana mode
+        // Ctrl+q → half-width katakana (composing: commit, empty: mode switch)
         if key.modifiers.control_key
             && !key.modifiers.shift_key
             && (key.keysym == Keysym::KEY_Q || key.keysym == Keysym::KEY_Q_UPPER)
@@ -174,7 +170,7 @@ impl InputMethodEngine {
             .with_action(EngineAction::HideAuxText)
     }
 
-    /// Shift+Ctrl+q: convert composing text to half-width katakana and commit immediately
+    /// Convert composing text to half-width katakana and commit immediately
     fn skk_commit_as_halfwidth_katakana(&mut self) -> EngineResult {
         self.flush_romaji_to_composed();
         let reading = self.input_buf.text.clone();
@@ -192,27 +188,24 @@ impl InputMethodEngine {
             .with_action(EngineAction::HideAuxText)
     }
 
-    /// Ctrl+q: enter half-width katakana mode
+    /// Ctrl+q: in composing state, convert to half-width katakana and commit;
+    /// in empty state, switch to half-width katakana mode.
     fn skk_enter_halfwidth_katakana(&mut self) -> EngineResult {
+        // Composing中は半角カタカナに変換して即確定
+        if matches!(self.state, InputState::Composing { .. }) {
+            return self.skk_commit_as_halfwidth_katakana();
+        }
+
+        // Empty状態ではモード切替
         if self.input_mode == InputMode::HalfWidthKatakana {
             return EngineResult::consumed();
         }
-
         if self.input_mode == InputMode::Katakana {
             self.bake_katakana();
         }
-
         self.input_mode = InputMode::HalfWidthKatakana;
         self.live.text.clear();
-
         let aux = self.format_aux_composing();
-
-        if matches!(self.state, InputState::Composing { .. }) {
-            let preedit = self.set_composing_state();
-            return EngineResult::consumed()
-                .with_action(EngineAction::UpdatePreedit(preedit))
-                .with_action(EngineAction::UpdateAuxText(aux));
-        }
         EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
     }
 }

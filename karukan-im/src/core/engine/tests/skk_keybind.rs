@@ -196,16 +196,32 @@ fn test_skk_l_in_composing_katakana_commits_katakana() {
 }
 
 #[test]
-fn test_skk_halfwidth_katakana_display() {
+fn test_skk_ctrl_q_in_composing_commits_halfwidth_katakana() {
     let mut engine = make_skk_engine();
 
-    // Type "a" to get "あ"
+    // Type "a" to get "あ" in composing state
     engine.process_key(&press('a'));
-    assert_eq!(engine.preedit().unwrap().text(), "あ");
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
 
-    // Switch to half-width katakana via Ctrl+q
-    engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    // Press Ctrl+q — should commit as half-width katakana and return to hiragana
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+    assert!(result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::Commit(t) if t == "ｱ")));
+}
+
+#[test]
+fn test_skk_ctrl_q_in_empty_switches_mode() {
+    let mut engine = make_skk_engine();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    // Ctrl+q in empty state switches to half-width katakana mode
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
-    // Preedit should show half-width katakana
-    assert_eq!(engine.preedit().unwrap().text(), "ｱ");
+    assert!(matches!(engine.state(), InputState::Empty));
 }
