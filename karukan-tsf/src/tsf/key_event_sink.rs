@@ -129,7 +129,8 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
 
                 // Update language bar
                 if let Some(ref item) = inner.lang_bar_item {
-                    let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
+                    let button: &KarukanLangBarButton =
+                        unsafe { windows::core::AsImpl::as_impl(item) };
                     button.update_mode(inner.engine.input_mode(), inner.enabled);
                 }
 
@@ -214,8 +215,7 @@ fn apply_engine_actions(
     let composition_cell = Rc::new(RefCell::new(composition_snapshot));
 
     // Get the ITfCompositionSink from our service (for StartComposition)
-    let service_unknown: IUnknown = service.into();
-    let composition_sink: ITfCompositionSink = service_unknown.cast()?;
+    let composition_sink: ITfCompositionSink = service.cast()?;
 
     let session = ActionEditSession::new(
         context.clone(),
@@ -255,7 +255,8 @@ fn update_lang_bar_if_mode_changed(service: &KarukanTextService_Impl) {
     if current_mode != inner.prev_input_mode {
         inner.prev_input_mode = current_mode;
         if let Some(ref item) = inner.lang_bar_item {
-            let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
+            let button: &KarukanLangBarButton =
+                unsafe { windows::core::AsImpl::as_impl(item) };
             button.update_mode(current_mode, inner.enabled);
         }
     }
