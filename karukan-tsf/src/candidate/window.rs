@@ -258,7 +258,7 @@ unsafe fn paint_candidates(hwnd: HWND) {
                 // Draw "N. candidate" label
                 let label = format!("{}. {}", i + 1, candidate);
                 let label_wide: Vec<u16> = label.encode_utf16().collect();
-                TextOutW(hdc, CANDIDATE_PADDING, y + 3, &label_wide);
+                let _ = TextOutW(hdc, CANDIDATE_PADDING, y + 3, &label_wide);
             }
 
             let _ = DeleteObject(highlight_brush);

@@ -38,7 +38,7 @@ pub struct ActionEditSession {
     actions: Vec<EngineAction>,
     /// Shared composition reference — updated during DoEditSession.
     composition: Rc<RefCell<Option<ITfComposition>>>,
-    client_id: u32,
+    _client_id: u32,
     /// Composition sink for StartComposition callback.
     composition_sink: ITfCompositionSink,
     /// Candidate window reference for show/hide.
@@ -65,7 +65,7 @@ impl ActionEditSession {
             context,
             actions,
             composition,
-            client_id,
+            _client_id: client_id,
             composition_sink,
             candidate_window,
             display_attr_atom_input,
