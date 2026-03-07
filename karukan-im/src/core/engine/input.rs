@@ -233,8 +233,11 @@ impl InputMethodEngine {
             Keysym::ESCAPE => self.cancel_composing(),
             Keysym::BACKSPACE => self.backspace_composing(),
             Keysym::DELETE => self.delete_composing(),
+            Keysym::MUHENKAN => self.commit_composing(),
             Keysym::SPACE if self.input_mode == InputMode::Alphabet => self.input_char(' '),
-            Keysym::SPACE | Keysym::DOWN | Keysym::TAB => self.start_conversion(),
+            Keysym::SPACE | Keysym::DOWN | Keysym::TAB | Keysym::HENKAN => {
+                self.start_conversion()
+            }
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
             Keysym::HOME => self.move_caret_home(),

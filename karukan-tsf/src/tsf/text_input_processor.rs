@@ -10,10 +10,11 @@ use windows::core::*;
 use crate::candidate::window::CandidateWindow;
 use crate::engine_bridge::EngineBridge;
 use crate::globals::{
-    dll_add_ref, dll_release, CLSID_KARUKAN_TEXT_SERVICE, GUID_DISPLAY_ATTRIBUTE_CONVERTED,
-    GUID_DISPLAY_ATTRIBUTE_INPUT, GUID_KARUKAN_PROFILE, GUID_PRESERVED_KEY_ONOFF,
-    LANGID_JAPANESE,
+    CLSID_KARUKAN_TEXT_SERVICE, GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT,
+    GUID_KARUKAN_PROFILE, GUID_PRESERVED_KEY_ONOFF, LANGID_JAPANESE, dll_add_ref, dll_release,
 };
+use crate::tsf::compartment;
+use crate::tsf::lang_bar::KarukanLangBarButton;
 
 /// The main karukan text service COM object.
 ///
@@ -26,6 +27,7 @@ use crate::globals::{
     ITfCompositionSink,
     ITfDisplayAttributeProvider,
     ITfThreadMgrEventSink,
+    ITfCompartmentEventSink
 )]
 pub struct KarukanTextService {
     pub(crate) inner: RefCell<KarukanTextServiceInner>,
@@ -40,16 +42,22 @@ pub(crate) struct KarukanTextServiceInner {
     pub(crate) thread_mgr_sink_cookie: u32,
     /// Cookie for ITfKeyEventSink
     pub(crate) keystroke_mgr_cookie: bool,
+    /// Cookie for ITfCompartmentEventSink on GUID_COMPARTMENT_KEYBOARD_OPENCLOSE
+    pub(crate) compartment_sink_cookie: u32,
     /// Cached EngineResult from OnTestKeyDown for reuse in OnKeyDown
     pub(crate) cached_result: Option<karukan_im::EngineResult>,
     /// Whether the IME is enabled (toggled via PreservedKey)
     pub(crate) enabled: bool,
     /// Candidate window for displaying conversion candidates
     pub(crate) candidate_window: Option<Rc<RefCell<CandidateWindow>>>,
+    /// Language bar button for mode display
+    pub(crate) lang_bar_item: Option<ITfLangBarItemButton>,
     /// Display attribute atom for input (composing) text
     pub(crate) display_attr_atom_input: u32,
     /// Display attribute atom for converted text
     pub(crate) display_attr_atom_converted: u32,
+    /// Previous input mode — tracked to detect mode changes for Language Bar updates
+    pub(crate) prev_input_mode: karukan_im::InputMode,
 }
 
 impl KarukanTextService {
@@ -63,11 +71,14 @@ impl KarukanTextService {
                 composition: None,
                 thread_mgr_sink_cookie: TF_INVALID_COOKIE,
                 keystroke_mgr_cookie: false,
+                compartment_sink_cookie: TF_INVALID_COOKIE,
                 cached_result: None,
                 enabled: true,
                 candidate_window: None,
+                lang_bar_item: None,
                 display_attr_atom_input: 0,
                 display_attr_atom_converted: 0,
+                prev_input_mode: karukan_im::InputMode::Hiragana,
             }),
         }
     }
@@ -123,6 +134,30 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
             inner.thread_mgr_sink_cookie = TF_INVALID_COOKIE;
         }
 
+        // Unadvise compartment event sink
+        if inner.compartment_sink_cookie != TF_INVALID_COOKIE {
+            if let Some(ref thread_mgr) = inner.thread_mgr {
+                let _ = compartment::unadvise_keyboard_openclose(
+                    thread_mgr,
+                    inner.client_id,
+                    inner.compartment_sink_cookie,
+                );
+            }
+            inner.compartment_sink_cookie = TF_INVALID_COOKIE;
+        }
+
+        // Remove language bar item
+        if let Some(lang_bar_item) = inner.lang_bar_item.take() {
+            if let Some(ref thread_mgr) = inner.thread_mgr {
+                unsafe {
+                    let lang_bar_mgr: Result<ITfLangBarItemMgr> = thread_mgr.cast();
+                    if let Ok(mgr) = lang_bar_mgr {
+                        let _ = mgr.RemoveItem(&lang_bar_item);
+                    }
+                }
+            }
+        }
+
         // Drop active composition reference (TSF handles cleanup)
         inner.composition = None;
 
@@ -142,12 +177,7 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
 
 // ITfTextInputProcessorEx implementation
 impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
-    fn ActivateEx(
-        &self,
-        ptim: Option<&ITfThreadMgr>,
-        tid: u32,
-        _dwflags: u32,
-    ) -> Result<()> {
+    fn ActivateEx(&self, ptim: Option<&ITfThreadMgr>, tid: u32, _dwflags: u32) -> Result<()> {
         let mut inner = self.inner.borrow_mut();
 
         let thread_mgr = ptim.ok_or(E_INVALIDARG)?;
@@ -162,10 +192,7 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
 
         // Register display attribute atoms via ITfCategoryMgr
         unsafe {
-            if let Ok(cat_mgr) = windows::Win32::System::Com::CoCreateInstance::<
-                _,
-                ITfCategoryMgr,
-            >(
+            if let Ok(cat_mgr) = windows::Win32::System::Com::CoCreateInstance::<_, ITfCategoryMgr>(
                 &CLSID_TF_CategoryMgr,
                 None,
                 windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
@@ -207,12 +234,7 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
                 uModifiers: 0,
             };
             let desc: Vec<u16> = "karukan IME toggle".encode_utf16().collect();
-            let _ = keystroke_mgr.PreserveKey(
-                tid,
-                &GUID_PRESERVED_KEY_ONOFF,
-                &pk,
-                &desc,
-            );
+            let _ = keystroke_mgr.PreserveKey(tid, &GUID_PRESERVED_KEY_ONOFF, &pk, &desc);
 
             inner.keystroke_mgr_cookie = true;
         }
@@ -221,14 +243,105 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
         unsafe {
             let source: ITfSource = thread_mgr.cast()?;
             let this_sink: ITfThreadMgrEventSink = self.cast()?;
-            let cookie = source.AdviseSink(
-                &ITfThreadMgrEventSink::IID,
-                &this_sink,
-            )?;
+            let cookie = source.AdviseSink(&ITfThreadMgrEventSink::IID, &this_sink)?;
             inner.thread_mgr_sink_cookie = cookie;
         }
 
+        // Add language bar button
+        unsafe {
+            let lang_bar_mgr: Result<ITfLangBarItemMgr> = thread_mgr.cast();
+            if let Ok(mgr) = lang_bar_mgr {
+                let button = KarukanLangBarButton::new();
+
+                // Set toggle callback: clicking the button toggles IME open/close
+                let toggle_thread_mgr = thread_mgr.clone();
+                let toggle_client_id = tid;
+                button.set_toggle_callback(Box::new(move || {
+                    if let Ok(open) =
+                        compartment::get_openclose_state(&toggle_thread_mgr, toggle_client_id)
+                    {
+                        let _ = compartment::set_openclose_state(
+                            &toggle_thread_mgr,
+                            toggle_client_id,
+                            !open,
+                        );
+                    }
+                }));
+
+                let item: ITfLangBarItemButton = button.into();
+                if mgr.AddItem(&item).is_ok() {
+                    inner.lang_bar_item = Some(item);
+                    tracing::debug!("Language bar item added");
+                }
+            }
+        }
+
+        // Advise compartment event sink for keyboard open/close
+        unsafe {
+            let this_sink: ITfCompartmentEventSink = self.cast()?;
+            match compartment::advise_keyboard_openclose(thread_mgr, inner.client_id, &this_sink) {
+                Ok(cookie) => {
+                    inner.compartment_sink_cookie = cookie;
+                    // Set initial open state
+                    let _ = compartment::set_openclose_state(thread_mgr, inner.client_id, true);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to advise compartment sink: {:?}", e);
+                }
+            }
+        }
+
         inner.enabled = true;
+
+        Ok(())
+    }
+}
+
+// ITfCompartmentEventSink implementation — syncs keyboard open/close state
+impl ITfCompartmentEventSink_Impl for KarukanTextService_Impl {
+    fn OnChange(&self, rguid: *const GUID) -> Result<()> {
+        unsafe {
+            if rguid.is_null() {
+                return Ok(());
+            }
+            if *rguid != GUID_COMPARTMENT_KEYBOARD_OPENCLOSE {
+                return Ok(());
+            }
+        }
+
+        let mut inner = self.inner.borrow_mut();
+        if let Some(ref thread_mgr) = inner.thread_mgr {
+            match compartment::get_openclose_state(thread_mgr, inner.client_id) {
+                Ok(open) => {
+                    let was_enabled = inner.enabled;
+                    inner.enabled = open;
+
+                    if was_enabled && !open {
+                        // IME closed: commit pending text and reset
+                        let _committed = inner.engine.commit();
+                        inner.engine.reset();
+                        inner.composition = None;
+                        if let Some(ref cw) = inner.candidate_window {
+                            cw.borrow_mut().hide();
+                        }
+                    }
+
+                    // Update language bar
+                    if let Some(ref item) = inner.lang_bar_item {
+                        let button: Result<&KarukanLangBarButton> =
+                            windows::core::AsImpl::as_impl(item);
+                        if let Ok(button) = button {
+                            button.update_mode(inner.engine.input_mode(), inner.enabled);
+                        }
+                    }
+
+                    tracing::debug!("Compartment OnChange: enabled={}", inner.enabled);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get openclose state: {:?}", e);
+                }
+            }
+        }
 
         Ok(())
     }

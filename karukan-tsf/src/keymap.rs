@@ -21,7 +21,7 @@ pub fn vk_to_keysym(vk: u32, unicode_char: Option<char>) -> Keysym {
 
     match vk {
         // Control keys
-        0x08 => Keysym::BACKSPACE,  // VK_BACK
+        0x08 => Keysym::BACKSPACE, // VK_BACK
         0x09 => Keysym::TAB,       // VK_TAB
         0x0D => Keysym::RETURN,    // VK_RETURN
         0x1B => Keysym::ESCAPE,    // VK_ESCAPE
@@ -39,7 +39,7 @@ pub fn vk_to_keysym(vk: u32, unicode_char: Option<char>) -> Keysym {
         0x23 => Keysym::END,       // VK_END
 
         // Function keys
-        0x70 => Keysym::F1,        // VK_F1
+        0x70 => Keysym::F1, // VK_F1
         0x71 => Keysym::F2,
         0x72 => Keysym::F3,
         0x73 => Keysym::F4,
@@ -50,7 +50,7 @@ pub fn vk_to_keysym(vk: u32, unicode_char: Option<char>) -> Keysym {
         0x78 => Keysym::F9,
         0x79 => Keysym::F10,
         0x7A => Keysym::F11,
-        0x7B => Keysym::F12,       // VK_F12
+        0x7B => Keysym::F12, // VK_F12
 
         // Modifier keys
         0xA0 => Keysym::SHIFT_L,   // VK_LSHIFT
@@ -76,6 +76,8 @@ pub fn vk_to_keysym(vk: u32, unicode_char: Option<char>) -> Keysym {
         // IME-specific keys
         0x15 => Keysym(0xff2a), // VK_KANJI / Hankaku/Zenkaku — mapped to Kanji keysym
         0x19 => Keysym(0xff23), // VK_KANJI (alternate) — Kana keysym
+        0x1C => Keysym::HENKAN,   // VK_CONVERT — 変換キー
+        0x1D => Keysym::MUHENKAN, // VK_NONCONVERT — 無変換キー
 
         // Unknown key
         _ => Keysym(0),
@@ -212,5 +214,11 @@ mod tests {
     #[test]
     fn test_unknown_vk() {
         assert_eq!(vk_to_keysym(0xFF, None), Keysym(0));
+    }
+
+    #[test]
+    fn test_vk_to_keysym_japanese_keys() {
+        assert_eq!(vk_to_keysym(0x1C, None), Keysym::HENKAN); // VK_CONVERT
+        assert_eq!(vk_to_keysym(0x1D, None), Keysym::MUHENKAN); // VK_NONCONVERT
     }
 }

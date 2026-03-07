@@ -82,10 +82,8 @@ impl EngineBridge {
 
         // Initialize main kanji converter
         let variant_id = resolve_variant_id(self.settings.conversion.model.as_deref())?;
-        self.engine.init_kanji_converter_with_model(
-            &variant_id,
-            self.settings.conversion.n_threads,
-        )?;
+        self.engine
+            .init_kanji_converter_with_model(&variant_id, self.settings.conversion.n_threads)?;
 
         // Initialize light model if configured
         if let Some(light_model) = &self.settings.conversion.light_model {
@@ -126,7 +124,8 @@ impl EngineBridge {
         win: bool,
         is_press: bool,
     ) -> EngineResult {
-        let key_event = keymap::create_key_event(vk, unicode_char, shift, control, alt, win, is_press);
+        let key_event =
+            keymap::create_key_event(vk, unicode_char, shift, control, alt, win, is_press);
         self.engine.process_key(&key_event)
     }
 
@@ -153,6 +152,11 @@ impl EngineBridge {
     /// Set surrounding text context for contextual conversion.
     pub fn set_surrounding_context(&mut self, left: &str, right: &str) {
         self.engine.set_surrounding_context(left, right);
+    }
+
+    /// Get the current input mode.
+    pub fn input_mode(&self) -> karukan_im::InputMode {
+        self.engine.input_mode()
     }
 
     /// Get access to the underlying engine actions for inspection.
@@ -209,5 +213,19 @@ mod tests {
         // Commit
         let text = bridge.commit();
         assert!(!text.is_empty());
+    }
+
+    #[test]
+    fn test_bridge_reset_after_commit() {
+        let mut bridge = EngineBridge::new();
+        // Type 'a' to enter composing state
+        bridge.process_key(0x41, Some('a'), false, false, false, false, true);
+        // Commit + reset (simulates OnCompositionTerminated)
+        let text = bridge.commit();
+        assert!(!text.is_empty());
+        bridge.reset();
+        // After reset, typing 'a' again should start fresh composing
+        let result = bridge.process_key(0x41, Some('a'), false, false, false, false, true);
+        assert!(result.consumed);
     }
 }

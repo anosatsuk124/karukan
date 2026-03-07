@@ -23,6 +23,7 @@ impl ITfCompositionSink_Impl for KarukanTextService_Impl {
         if !committed.is_empty() {
             tracing::debug!("Composition terminated, committed: {}", committed);
         }
+        inner.engine.reset();
 
         // Clear the composition reference
         inner.composition = None;

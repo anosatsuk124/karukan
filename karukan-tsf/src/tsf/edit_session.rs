@@ -17,11 +17,11 @@ use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 
 #[cfg(target_os = "windows")]
+use karukan_im::EngineAction;
+#[cfg(target_os = "windows")]
 use karukan_im::core::candidate::CandidateList;
 #[cfg(target_os = "windows")]
 use karukan_im::core::preedit::{AttributeType, Preedit};
-#[cfg(target_os = "windows")]
-use karukan_im::EngineAction;
 
 #[cfg(target_os = "windows")]
 use crate::candidate::window::CandidateWindow;
@@ -117,13 +117,11 @@ impl ActionEditSession {
         unsafe {
             // Get the insertion point range
             let insert_at_sel: ITfInsertAtSelection = self.context.cast()?;
-            let range =
-                insert_at_sel.InsertTextAtSelection(ec, TF_IAS_QUERYONLY.0 as u32, &[])?;
+            let range = insert_at_sel.InsertTextAtSelection(ec, TF_IAS_QUERYONLY.0 as u32, &[])?;
 
             // Start a new composition at the insertion point
             let ctx_comp: ITfContextComposition = self.context.cast()?;
-            let new_comp =
-                ctx_comp.StartComposition(ec, &range, &self.composition_sink)?;
+            let new_comp = ctx_comp.StartComposition(ec, &range, &self.composition_sink)?;
             *comp = Some(new_comp);
         }
 
@@ -162,6 +160,29 @@ impl ActionEditSession {
 
                 // Apply display attributes (underline, highlight, etc.)
                 self.apply_display_attributes(ec, &range, preedit)?;
+
+                // Set caret position within the composition
+                let caret_chars = preedit.caret();
+                let caret_utf16: i32 = preedit
+                    .text()
+                    .chars()
+                    .take(caret_chars)
+                    .map(|c| c.len_utf16() as i32)
+                    .sum();
+                let caret_range = range.Clone()?;
+                caret_range.Collapse(ec, TF_ANCHOR_START)?;
+                let mut shifted = 0i32;
+                caret_range.ShiftEnd(ec, caret_utf16, &mut shifted, std::ptr::null())?;
+                caret_range.Collapse(ec, TF_ANCHOR_END)?;
+
+                let sel = TF_SELECTION {
+                    range: core::mem::ManuallyDrop::new(Some(caret_range)),
+                    style: TF_SELECTIONSTYLE {
+                        ase: TF_AE_NONE,
+                        fInterimChar: FALSE,
+                    },
+                };
+                self.context.SetSelection(ec, &[sel])?;
             }
         }
 
