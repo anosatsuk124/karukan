@@ -16,14 +16,35 @@ makedepends=(
   'fcitx5'
   'pkg-config'
   'libxkbcommon'
+  'openssl'
   'gcc'
 )
 
 build() {
   cd "$startdir"
 
+  # Save makepkg flags (they interfere with llama-cpp-sys-2 / onig_sys bundled builds)
+  local _saved_cflags="$CFLAGS"
+  local _saved_cxxflags="$CXXFLAGS"
+  local _saved_ldflags="$LDFLAGS"
+  unset CFLAGS CXXFLAGS LDFLAGS
+
+  # Clear CMAKE_ variables (llama-cpp-sys-2 build.rs passes them all to CMake)
+  for _var in $(env | grep -o '^CMAKE_[^=]*'); do
+    unset "$_var"
+  done
+
+  # Clean stale build artifacts (makepkg env vars corrupt native lib builds
+  # and cargo doesn't invalidate cache when CFLAGS/CMAKE_* change)
+  cargo clean --release
+
   # Build all Rust crates
   cargo build --release
+
+  # Restore makepkg flags for fcitx5 addon build
+  export CFLAGS="$_saved_cflags"
+  export CXXFLAGS="$_saved_cxxflags"
+  export LDFLAGS="$_saved_ldflags"
 
   # Build fcitx5 addon
   cd karukan-im/fcitx5-addon
