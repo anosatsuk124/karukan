@@ -22,23 +22,25 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Build a binary dictionary from JSON or Mozc TSV format.
+    /// Build a binary dictionary from JSON, Mozc TSV, or SKK format.
     ///
-    /// Supports two input formats:
+    /// Supports three input formats:
     /// - `json`: Array of {reading, candidates: [{surface, score}]}
     /// - `mozc`: Mozc/Google IME TSV (reading\tword\tPOS\tcomment)
+    /// - `skk`: SKK dictionary (e.g. SKK-JISYO.L)
     ///
-    /// Format is auto-detected from file extension (.json → JSON, otherwise → Mozc TSV),
+    /// Format is auto-detected from file extension/name (.json → JSON,
+    /// SKK-JISYO* or .skk → SKK, otherwise → Mozc TSV),
     /// or can be explicitly specified with --format.
     Build {
-        /// Input dictionary file (JSON or Mozc TSV)
+        /// Input dictionary file (JSON, Mozc TSV, or SKK)
         input: PathBuf,
 
         /// Output binary dictionary file
         #[arg(short, long, default_value = "dict.bin")]
         output: PathBuf,
 
-        /// Input format: json or mozc (auto-detected from extension if omitted)
+        /// Input format: json, mozc, or skk (auto-detected from extension if omitted)
         #[arg(short, long)]
         format: Option<String>,
     },
@@ -81,13 +83,24 @@ enum Commands {
 // --- build subcommand ---
 
 fn run_build(input: PathBuf, output: PathBuf, format: Option<String>) -> Result<()> {
-    let format =
-        format
-            .as_deref()
-            .unwrap_or_else(|| match input.extension().and_then(|e| e.to_str()) {
-                Some("json") => "json",
-                _ => "mozc",
-            });
+    let format = format.as_deref().unwrap_or_else(|| {
+        match input.extension().and_then(|e| e.to_str()) {
+            Some("json") => "json",
+            Some("skk") => "skk",
+            _ => {
+                // Check filename for SKK-JISYO pattern
+                if input
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.contains("SKK-JISYO"))
+                {
+                    "skk"
+                } else {
+                    "mozc"
+                }
+            }
+        }
+    });
 
     eprintln!(
         "Building dictionary from {:?} (format: {})...",
@@ -97,7 +110,8 @@ fn run_build(input: PathBuf, output: PathBuf, format: Option<String>) -> Result<
     let dict = match format {
         "json" => Dictionary::build_from_json(&input)?,
         "mozc" => Dictionary::build_from_mozc_tsv(&input)?,
-        other => anyhow::bail!("Unknown format: {}. Use 'json' or 'mozc'.", other),
+        "skk" => Dictionary::build_from_skk(&input)?,
+        other => anyhow::bail!("Unknown format: {}. Use 'json', 'mozc', or 'skk'.", other),
     };
 
     eprintln!("Saving to {:?}...", output);

@@ -401,10 +401,131 @@ impl Dictionary {
         Self::build_from_entries(entries)
     }
 
+    /// Build a Dictionary from an SKK dictionary file.
+    ///
+    /// Supports both UTF-8 and EUC-JP encoded SKK dictionaries.
+    /// Lines starting with `;;` are comments.
+    /// Format: `reading /candidate1/candidate2;annotation/.../`
+    /// Okuri-ari entries (reading ends with ASCII letter) have the trailing letter stripped.
+    pub fn build_from_skk(path: impl AsRef<Path>) -> Result<Self> {
+        Self::build_from_skk_bytes(&std::fs::read(path.as_ref())?)
+    }
+
+    /// Build a Dictionary from SKK dictionary bytes (for testing).
+    fn build_from_skk_bytes(raw: &[u8]) -> Result<Self> {
+        // Decode: try UTF-8 first, then fall back to EUC-JP
+        let text = match std::str::from_utf8(raw) {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                let (decoded, _, _) = encoding_rs::EUC_JP.decode(raw);
+                decoded.into_owned()
+            }
+        };
+
+        // reading -> Vec<surface> (preserving insertion order, deduped)
+        let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+        let mut order: Vec<String> = Vec::new();
+
+        for line in text.lines() {
+            let line = line.trim();
+            // Skip comments and empty lines
+            if line.is_empty() || line.starts_with(";;") {
+                continue;
+            }
+
+            // Split into reading and candidates part
+            let Some(slash_pos) = line.find(' ') else {
+                continue;
+            };
+            let raw_reading = &line[..slash_pos];
+            let candidates_part = &line[slash_pos + 1..];
+
+            // Process reading: strip trailing ASCII letter (okuri-ari)
+            let reading = if raw_reading
+                .bytes()
+                .last()
+                .is_some_and(|b| b.is_ascii_alphabetic())
+            {
+                &raw_reading[..raw_reading.len() - 1]
+            } else {
+                raw_reading
+            };
+
+            if reading.is_empty() {
+                continue;
+            }
+
+            // Parse candidates: /candidate1;annotation/candidate2/
+            let surfaces = groups.entry(reading.to_string()).or_insert_with(|| {
+                order.push(reading.to_string());
+                Vec::new()
+            });
+
+            for candidate in candidates_part.split('/') {
+                if candidate.is_empty() {
+                    continue;
+                }
+                // Skip numeric conversion notation
+                if candidate.starts_with('#') {
+                    continue;
+                }
+                // Strip annotation (after ';')
+                let surface = candidate.split(';').next().unwrap_or(candidate);
+                if surface.is_empty() {
+                    continue;
+                }
+                // Deduplicate
+                if !surfaces.contains(&surface.to_string()) {
+                    surfaces.push(surface.to_string());
+                }
+            }
+        }
+
+        // Convert to DictEntry with scores based on candidate order
+        let mut entries: Vec<DictEntry> = order
+            .into_iter()
+            .filter_map(|reading| {
+                groups.remove(&reading).map(|surfaces| DictEntry {
+                    reading,
+                    candidates: surfaces
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, surface)| Candidate {
+                            surface,
+                            score: i as f32,
+                        })
+                        .collect(),
+                })
+            })
+            .collect();
+
+        // Sort by reading bytes for the trie builder
+        entries.sort_by(|a, b| a.reading.as_bytes().cmp(b.reading.as_bytes()));
+
+        // Deduplicate entries with the same reading (merge candidates)
+        entries.dedup_by(|b, a| {
+            if a.reading == b.reading {
+                for cand in std::mem::take(&mut b.candidates) {
+                    if !a.candidates.iter().any(|c| c.surface == cand.surface) {
+                        a.candidates.push(cand);
+                    }
+                }
+                true
+            } else {
+                false
+            }
+        });
+
+        Self::build_from_entries(entries)
+    }
+
     /// Load a dictionary with auto-detection of format.
     ///
-    /// If the file starts with the `KRKN` magic bytes, it is loaded as binary.
-    /// Otherwise, it is parsed as Mozc/Google IME TSV format.
+    /// Detection order:
+    /// 1. First 4 bytes are `KRKN` → binary dictionary
+    /// 2. First 2 bytes are `;;` → SKK dictionary
+    /// 3. Filename contains `SKK-JISYO` or has `.skk` extension → SKK dictionary
+    /// 4. Otherwise → Mozc TSV (backward compatible)
     pub fn load_auto(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let mut file = File::open(path)?;
@@ -414,8 +535,14 @@ impl Dictionary {
         if bytes_read >= 4 && &magic == MAGIC {
             // Binary KRKN format
             Dictionary::load(path)
+        } else if bytes_read >= 2 && &magic[..2] == b";;" {
+            // SKK dictionary (starts with comment)
+            Dictionary::build_from_skk(path)
+        } else if is_skk_filename(path) {
+            // SKK dictionary (detected by filename)
+            Dictionary::build_from_skk(path)
         } else {
-            // Mozc TSV format
+            // Mozc TSV format (backward compatible)
             Dictionary::build_from_mozc_tsv(path)
         }
     }
@@ -462,6 +589,18 @@ impl Dictionary {
 
         Self::build_from_entries(entries).map(Some)
     }
+}
+
+/// Check if a filename looks like an SKK dictionary.
+///
+/// Returns true if the filename contains "SKK-JISYO" or has a `.skk` extension.
+fn is_skk_filename(path: &Path) -> bool {
+    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+        && name.contains("SKK-JISYO")
+    {
+        return true;
+    }
+    matches!(path.extension().and_then(|e| e.to_str()), Some("skk"))
 }
 
 /// Unescape `\uXXXX` Unicode escape sequences in a string.
@@ -928,6 +1067,99 @@ col0,col1,col2,4500,今日,col5,col6,col7,col8,col9,col10,キョウ
     fn test_merge_empty() {
         let result = Dictionary::merge(vec![]).unwrap();
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_build_from_skk_okuri_nasi() {
+        let skk = b";; SKK-JISYO test\n\
+                    \xe3\x81\x8d\xe3\x82\x87\xe3\x81\x86 /\xe4\xbb\x8a\xe6\x97\xa5/\xe4\xba\xac/\n\
+                    \xe3\x81\x8d\xe3\x82\x87\xe3\x81\x86\xe3\x81\xa8 /\xe4\xba\xac\xe9\x83\xbd/\n";
+        // "きょう /今日/京/\nきょうと /京都/\n" in UTF-8
+        let dict = Dictionary::build_from_skk_bytes(skk).unwrap();
+        let result = dict.exact_match_search("きょう").unwrap();
+        assert_eq!(result.candidates.len(), 2);
+        assert_eq!(result.candidates[0].surface, "今日");
+        assert_eq!(result.candidates[1].surface, "京");
+        // Score order: first candidate = 0.0, second = 1.0
+        assert!((result.candidates[0].score - 0.0).abs() < f32::EPSILON);
+        assert!((result.candidates[1].score - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_build_from_skk_okuri_ari() {
+        // okuri-ari: "あi /会/合/" → reading "あ" (trailing 'i' stripped)
+        let skk = "あi /会/合/\n";
+        let dict = Dictionary::build_from_skk_bytes(skk.as_bytes()).unwrap();
+        let result = dict.exact_match_search("あ").unwrap();
+        assert_eq!(result.candidates.len(), 2);
+        assert_eq!(result.candidates[0].surface, "会");
+        assert_eq!(result.candidates[1].surface, "合");
+    }
+
+    #[test]
+    fn test_build_from_skk_annotation() {
+        // Annotations after ';' should be stripped
+        let skk = "きょう /今日;today/京;capital/\n";
+        let dict = Dictionary::build_from_skk_bytes(skk.as_bytes()).unwrap();
+        let result = dict.exact_match_search("きょう").unwrap();
+        assert_eq!(result.candidates[0].surface, "今日");
+        assert_eq!(result.candidates[1].surface, "京");
+    }
+
+    #[test]
+    fn test_build_from_skk_comment_skip() {
+        let skk = ";; comment line\n\
+                    ;; another comment\n\
+                    きょう /今日/\n";
+        let dict = Dictionary::build_from_skk_bytes(skk.as_bytes()).unwrap();
+        assert_eq!(dict.entries.len(), 1);
+        assert!(dict.exact_match_search("きょう").is_some());
+    }
+
+    #[test]
+    fn test_build_from_skk_numeric_skip() {
+        // Candidates starting with '#' should be skipped
+        let skk = "きょう /今日/#1日/京/\n";
+        let dict = Dictionary::build_from_skk_bytes(skk.as_bytes()).unwrap();
+        let result = dict.exact_match_search("きょう").unwrap();
+        assert_eq!(result.candidates.len(), 2);
+        assert_eq!(result.candidates[0].surface, "今日");
+        assert_eq!(result.candidates[1].surface, "京");
+    }
+
+    #[test]
+    fn test_build_from_skk_euc_jp() {
+        // Test EUC-JP encoded SKK dictionary
+        let utf8_text = ";; okuri-nasi entries.\nきょう /今日/京/\n";
+        let (encoded, _, _) = encoding_rs::EUC_JP.encode(utf8_text);
+        let dict = Dictionary::build_from_skk_bytes(&encoded).unwrap();
+        let result = dict.exact_match_search("きょう").unwrap();
+        assert_eq!(result.candidates.len(), 2);
+        assert_eq!(result.candidates[0].surface, "今日");
+    }
+
+    #[test]
+    fn test_load_auto_skk_by_content() {
+        // SKK dictionary starting with ";;" should be auto-detected
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(
+            b";; SKK-JISYO test\n\xe3\x81\x8d\xe3\x82\x87\xe3\x81\x86 /\xe4\xbb\x8a\xe6\x97\xa5/\n",
+        )
+        .unwrap();
+        f.flush().unwrap();
+
+        let dict = Dictionary::load_auto(f.path()).unwrap();
+        let result = dict.exact_match_search("きょう").unwrap();
+        assert_eq!(result.candidates[0].surface, "今日");
+    }
+
+    #[test]
+    fn test_is_skk_filename() {
+        assert!(is_skk_filename(Path::new("/path/to/SKK-JISYO.L")));
+        assert!(is_skk_filename(Path::new("SKK-JISYO.M")));
+        assert!(is_skk_filename(Path::new("my-dict.skk")));
+        assert!(!is_skk_filename(Path::new("dict.json")));
+        assert!(!is_skk_filename(Path::new("mozc.tsv")));
     }
 
     #[test]

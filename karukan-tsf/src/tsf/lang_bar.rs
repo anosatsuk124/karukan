@@ -81,6 +81,7 @@ impl KarukanLangBarButton {
             InputMode::Katakana => "\u{30AB}",          // カ
             InputMode::HalfWidthKatakana => "\u{FF76}", // ｶ
             InputMode::Alphabet => "A",
+            InputMode::RawInput => "/",
         }
     }
 
@@ -93,6 +94,7 @@ impl KarukanLangBarButton {
             InputMode::Katakana => "\u{30AB}\u{30BF}\u{30AB}\u{30CA}", // カタカナ
             InputMode::HalfWidthKatakana => "\u{534A}\u{89D2}\u{30AB}\u{30BF}\u{30AB}\u{30CA}", // 半角カタカナ
             InputMode::Alphabet => "\u{82F1}\u{6570}", // 英数
+            InputMode::RawInput => "SKK /",            // SKK abbrev
         }
     }
 }

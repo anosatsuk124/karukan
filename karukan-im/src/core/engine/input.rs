@@ -19,15 +19,18 @@ fn append_candidates_dedup(target: &mut Vec<Candidate>, source: Vec<Candidate>) 
 impl InputMethodEngine {
     /// Refresh the input state: rebuild preedit and run auto-suggest for candidates.
     pub(super) fn refresh_input_state(&mut self) -> EngineResult {
-        // Alphabet mode with active live conversion: preserve the conversion display
-        if self.input_mode == InputMode::Alphabet && !self.live.text.is_empty() {
+        // Alphabet/RawInput mode with active live conversion: preserve the conversion display
+        if (self.input_mode == InputMode::Alphabet || self.input_mode == InputMode::RawInput)
+            && !self.live.text.is_empty()
+        {
             let preedit = self.set_composing_state();
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Run auto-suggest (skip in alphabet/halfwidth-katakana modes — no hiragana to convert)
+        // Run auto-suggest (skip in alphabet/halfwidth-katakana/raw-input modes — no hiragana to convert)
         let candidates = if self.input_mode != InputMode::Alphabet
             && self.input_mode != InputMode::HalfWidthKatakana
+            && self.input_mode != InputMode::RawInput
             && !self.input_buf.text.is_empty()
         {
             let reading = self.input_buf.text.clone();
@@ -154,7 +157,7 @@ impl InputMethodEngine {
         self.converters.romaji.reset();
         self.input_buf.clear();
 
-        if self.input_mode == InputMode::Alphabet {
+        if self.input_mode == InputMode::Alphabet || self.input_mode == InputMode::RawInput {
             self.input_buf.insert(&ch.to_string());
         } else {
             let prev_output_len = 0;
@@ -235,6 +238,7 @@ impl InputMethodEngine {
             Keysym::DELETE => self.delete_composing(),
             Keysym::MUHENKAN => self.commit_composing(),
             Keysym::SPACE if self.input_mode == InputMode::Alphabet => self.input_char(' '),
+            Keysym::SPACE if self.input_mode == InputMode::RawInput => self.start_conversion(),
             Keysym::SPACE | Keysym::DOWN | Keysym::TAB | Keysym::HENKAN => self.start_conversion(),
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
@@ -277,7 +281,7 @@ impl InputMethodEngine {
     /// Input a character during composing.
     /// In alphabet mode, inserts directly; otherwise goes through romaji conversion.
     pub(super) fn input_char(&mut self, ch: char) -> EngineResult {
-        if self.input_mode == InputMode::Alphabet {
+        if self.input_mode == InputMode::Alphabet || self.input_mode == InputMode::RawInput {
             self.input_buf.insert(&ch.to_string());
             return self.refresh_input_state();
         }
@@ -369,6 +373,11 @@ impl InputMethodEngine {
         self.live.text.clear();
         self.state = InputState::Empty;
 
+        // Return to Hiragana mode after committing from RawInput
+        if self.input_mode == InputMode::RawInput {
+            self.input_mode = InputMode::Hiragana;
+        }
+
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
             .with_action(EngineAction::Commit(text))
@@ -393,6 +402,11 @@ impl InputMethodEngine {
         self.input_buf.clear();
         self.live.text.clear();
         self.state = InputState::Empty;
+
+        // Return to Hiragana mode after cancelling from RawInput
+        if self.input_mode == InputMode::RawInput {
+            self.input_mode = InputMode::Hiragana;
+        }
 
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))

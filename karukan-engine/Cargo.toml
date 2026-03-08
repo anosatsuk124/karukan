@@ -31,6 +31,9 @@ yada = "0.5"
 # HuggingFace model download
 hf-hub = "0.4"
 
+# SKK dictionary encoding (EUC-JP → UTF-8 conversion)
+encoding_rs = "0.8"
+
 # Unicode normalization (NFKC) for models whose tokenizer doesn't support full-width ASCII
 unicode-normalization = "0.1"
 

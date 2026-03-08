@@ -106,6 +106,7 @@ impl InputMethodEngine {
             InputMode::Katakana => "[カ]",
             InputMode::HalfWidthKatakana => "[ｶ]",
             InputMode::Hiragana => "[あ]",
+            InputMode::RawInput => "[/]",
         };
         if self.live.enabled {
             format!("⚡{}", base)

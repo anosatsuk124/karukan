@@ -121,6 +121,8 @@ pub enum InputMode {
     HalfWidthKatakana,
     /// Alphabet (direct input) mode — characters bypass romaji conversion
     Alphabet,
+    /// Raw input mode (SKK abbrev) — ASCII input for dictionary lookup via `/` key
+    RawInput,
 }
 
 /// Live conversion state: enabled flag and current converted text

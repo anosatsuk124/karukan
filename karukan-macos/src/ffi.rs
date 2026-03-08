@@ -456,5 +456,6 @@ pub extern "C" fn karukan_macos_input_mode(engine: *const KarukanMacEngine) -> c
         karukan_im::InputMode::Katakana => 1,
         karukan_im::InputMode::HalfWidthKatakana => 2,
         karukan_im::InputMode::Alphabet => 3,
+        karukan_im::InputMode::RawInput => 4,
     }
 }

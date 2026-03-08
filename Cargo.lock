@@ -1345,6 +1345,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "criterion",
+ "encoding_rs",
  "hf-hub",
  "llama-cpp-2",
  "serde",
