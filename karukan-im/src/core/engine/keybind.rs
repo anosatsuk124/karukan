@@ -57,6 +57,18 @@ impl InputMethodEngine {
             return Some(self.skk_enter_alphabet());
         }
 
+        // / (slash, no modifiers, in kana mode, Empty state) → enter raw input (abbrev) mode
+        if key.keysym == Keysym(0x002f)
+            && key.modifiers.is_empty()
+            && matches!(
+                self.input_mode,
+                InputMode::Hiragana | InputMode::Katakana | InputMode::HalfWidthKatakana
+            )
+            && matches!(self.state, InputState::Empty)
+        {
+            return Some(self.skk_enter_raw_input());
+        }
+
         // q (no modifiers, in kana mode) → toggle katakana
         if key.keysym == Keysym::KEY_Q
             && key.modifiers.is_empty()
@@ -96,6 +108,21 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(aux));
         }
         EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
+    }
+
+    /// / key: enter raw input (abbrev) mode for ASCII dictionary lookup
+    fn skk_enter_raw_input(&mut self) -> EngineResult {
+        self.input_mode = InputMode::RawInput;
+        self.converters.romaji.reset();
+        self.input_buf.clear();
+
+        // Enter composing state with empty preedit
+        let preedit = self.set_composing_state();
+        let aux = self.format_aux_composing();
+
+        EngineResult::consumed()
+            .with_action(EngineAction::UpdatePreedit(preedit))
+            .with_action(EngineAction::UpdateAuxText(aux))
     }
 
     /// l key: commit composing text and switch to alphabet mode

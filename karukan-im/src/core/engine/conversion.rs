@@ -324,19 +324,24 @@ impl InputMethodEngine {
         reading: &str,
         num_candidates: usize,
     ) -> Vec<AnnotatedCandidate> {
-        // Ensure kanji converter is initialized
-        if self.converters.kanji.is_none()
-            && let Err(e) = self.init_kanji_converter()
-        {
-            debug!("Failed to initialize kanji converter: {}", e);
-            return vec![AnnotatedCandidate {
-                text: reading.to_string(),
-                source: CandidateSource::Fallback,
-                reading: None,
-            }];
-        }
+        // RawInput mode: skip model inference, use only dictionary + learning cache
+        let candidates = if self.input_mode == InputMode::RawInput {
+            vec![]
+        } else {
+            // Ensure kanji converter is initialized
+            if self.converters.kanji.is_none()
+                && let Err(e) = self.init_kanji_converter()
+            {
+                debug!("Failed to initialize kanji converter: {}", e);
+                return vec![AnnotatedCandidate {
+                    text: reading.to_string(),
+                    source: CandidateSource::Fallback,
+                    reading: None,
+                }];
+            }
 
-        let candidates = self.run_kana_kanji_conversion(reading, num_candidates);
+            self.run_kana_kanji_conversion(reading, num_candidates)
+        };
 
         let hiragana = reading.to_string();
         let katakana = Self::hiragana_to_katakana(reading);
@@ -543,6 +548,11 @@ impl InputMethodEngine {
         self.state = InputState::Empty;
         self.input_buf.text.clear();
 
+        // Return to Hiragana mode after conversion from RawInput
+        if self.input_mode == InputMode::RawInput {
+            self.input_mode = InputMode::Hiragana;
+        }
+
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
             .with_action(EngineAction::HideCandidates)
@@ -562,6 +572,11 @@ impl InputMethodEngine {
 
         self.state = InputState::Empty;
         self.input_buf.text.clear();
+
+        // Return to Hiragana mode after conversion from RawInput
+        if self.input_mode == InputMode::RawInput {
+            self.input_mode = InputMode::Hiragana;
+        }
 
         // Start new input with the character
         let new_input_result = self.start_input(ch);

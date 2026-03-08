@@ -39,6 +39,22 @@ regsvr32 target\release\karukan_tsf.dll
 regsvr32 /u target\release\karukan_tsf.dll
 ```
 
+## 辞書と設定
+
+### 設定ファイル
+
+`%APPDATA%\karukan\karukan-im\config\config.toml`
+
+### ユーザー辞書
+
+`%APPDATA%\karukan\karukan-im\data\user_dicts\` に辞書ファイルを配置すると、ユーザー辞書として読み込まれます（KRKNバイナリ・Mozc TSV・SKK辞書を自動判定）。
+
+### システム辞書
+
+`%APPDATA%\karukan\karukan-im\data\dict.bin`
+
+設定やキーバインドの詳細は [karukan-im の README](../karukan-im/README.md) を参照してください。
+
 ## License
 
 MIT OR Apache-2.0
