@@ -233,3 +233,76 @@ fn test_skk_ctrl_q_in_empty_switches_mode() {
     assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
     assert!(matches!(engine.state(), InputState::Empty));
 }
+
+// --- Zenkaku/Hankaku, HENKAN, MUHENKAN tests ---
+
+#[test]
+fn test_skk_zenkaku_hankaku_hiragana_to_alphabet() {
+    let mut engine = make_skk_engine();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+}
+
+#[test]
+fn test_skk_zenkaku_hankaku_alphabet_to_hiragana() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Alphabet;
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_zenkaku_hankaku_composing_commits_and_toggles() {
+    let mut engine = make_skk_engine();
+
+    // Type "a" to enter composing state with "あ"
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    // Zenkaku/Hankaku should commit composing text and switch to alphabet
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "あ"))
+    );
+}
+
+#[test]
+fn test_skk_muhenkan_switches_to_alphabet() {
+    let mut engine = make_skk_engine();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    let result = engine.process_key(&press_key(Keysym::MUHENKAN));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+}
+
+#[test]
+fn test_skk_henkan_switches_to_hiragana() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Katakana;
+
+    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_henkan_from_alphabet() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Alphabet;
+
+    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}

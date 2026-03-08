@@ -20,9 +20,19 @@ impl InputMethodEngine {
             return None;
         }
 
-        // SKK mode does not use Henkan/Muhenkan keys — pass them through
-        if matches!(key.keysym, Keysym::HENKAN | Keysym::MUHENKAN) {
-            return Some(EngineResult::not_consumed());
+        // Zenkaku/Hankaku: toggle hiragana ↔ alphabet
+        if key.keysym == Keysym::ZENKAKU_HANKAKU {
+            return Some(self.skk_toggle_kana_alphabet());
+        }
+
+        // MUHENKAN (macOS英数キー): switch to alphabet
+        if key.keysym == Keysym::MUHENKAN {
+            return Some(self.skk_enter_alphabet());
+        }
+
+        // HENKAN (macOSかなキー): switch to hiragana
+        if key.keysym == Keysym::HENKAN {
+            return Some(self.skk_enter_hiragana());
         }
 
         // Ctrl+j → enter hiragana mode (from any mode)
@@ -69,6 +79,15 @@ impl InputMethodEngine {
         }
 
         None
+    }
+
+    /// Zenkaku/Hankaku: toggle between hiragana and alphabet mode
+    fn skk_toggle_kana_alphabet(&mut self) -> EngineResult {
+        if self.input_mode == InputMode::Alphabet {
+            self.skk_enter_hiragana()
+        } else {
+            self.skk_enter_alphabet()
+        }
     }
 
     /// Ctrl+j: switch to hiragana mode from any mode
