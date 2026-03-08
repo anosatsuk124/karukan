@@ -24,7 +24,8 @@ jobs:
           bash scripts/build.sh arm64
       - name: Verify .app bundle
         run: |
-          test -d karukan-macos/build/Karukan.app/Contents/MacOS/KarukanInputMethod
+          test -f karukan-macos/build/Karukan.app/Contents/MacOS/KarukanInputMethod
+          test -f karukan-macos/build/Karukan.app/Contents/Info.plist
           codesign --verify karukan-macos/build/Karukan.app
       - name: Package .app
         run: |
@@ -49,10 +50,13 @@ jobs:
           workspaces: ". -> target"
       - name: Build release DLL
         run: cargo build -p karukan-tsf --release
+      - name: Install NSIS
+        run: choco install nsis -y
+        shell: cmd
       - name: Build NSIS installer
         run: |
           copy target\release\karukan_tsf.dll karukan-tsf\installer\
-          makensis /DVERSION=${{ github.ref_name }} karukan-tsf\installer\karukan-installer.nsi
+          "%ProgramFiles(x86)%\NSIS\makensis.exe" /DVERSION=${{ github.ref_name }} karukan-tsf\installer\karukan-installer.nsi
         shell: cmd
       - uses: actions/upload-artifact@v4
         with:
