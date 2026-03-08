@@ -1,0 +1,104 @@
+name: karukan-macos CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'karukan-macos/**'
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/karukan-macos-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'karukan-macos/**'
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/karukan-macos-ci.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check-macos:
+    name: Check (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Run cargo check
+        run: cargo check -p karukan-macos --all-targets
+
+  clippy-macos:
+    name: Clippy (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Run cargo clippy
+        run: cargo clippy -p karukan-macos --all-targets -- -D warnings
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Run cargo fmt
+        run: cargo fmt -p karukan-macos -- --check
+
+  test:
+    name: Test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Run tests
+        run: cargo test -p karukan-macos
+
+  build-macos-app:
+    name: Build .app (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Build .app bundle
+        run: |
+          cd karukan-macos
+          bash scripts/build.sh arm64
+      - name: Verify .app bundle
+        run: |
+          test -f karukan-macos/build/Karukan.app/Contents/MacOS/KarukanInputMethod
+          test -f karukan-macos/build/Karukan.app/Contents/Info.plist
+          codesign --verify karukan-macos/build/Karukan.app
+      - name: Package .app for upload
+        run: |
+          cd karukan-macos/build
+          ditto -c -k --keepParent Karukan.app Karukan-macos-arm64.zip
+      - name: Upload .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Karukan-macos-arm64
+          path: karukan-macos/build/Karukan-macos-arm64.zip
+          retention-days: 14
