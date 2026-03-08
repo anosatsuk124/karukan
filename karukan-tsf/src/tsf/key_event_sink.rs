@@ -113,12 +113,13 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                 if inner.engine.is_skk_mode() {
                     let key = karukan_im::KeyEvent::press(karukan_im::Keysym::ZENKAKU_HANKAKU);
                     let result = inner.engine.process_key_event(&key);
-                    if result.consumed && !result.actions.is_empty() {
-                        if let Some(context) = pic {
-                            drop(inner);
-                            apply_engine_actions(self, context, &result.actions)?;
-                            update_lang_bar_if_mode_changed(self);
-                        }
+                    if result.consumed
+                        && !result.actions.is_empty()
+                        && let Some(context) = pic
+                    {
+                        drop(inner);
+                        apply_engine_actions(self, context, &result.actions)?;
+                        update_lang_bar_if_mode_changed(self);
                     }
                     return Ok(TRUE);
                 }
