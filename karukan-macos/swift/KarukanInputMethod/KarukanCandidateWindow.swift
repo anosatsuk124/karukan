@@ -37,12 +37,22 @@ class KarukanCandidateWindow {
             y: nearRect.origin.y - contentView.frame.height
         )
 
-        // Clamp to screen bounds
-        if let screen = NSScreen.main {
+        // Find the screen containing the cursor, fall back to main screen
+        let targetScreen = NSScreen.screens.first(where: { screen in
+            screen.frame.contains(NSPoint(x: nearRect.midX, y: nearRect.midY))
+        }) ?? NSScreen.main
+
+        if let screen = targetScreen {
             let screenFrame = screen.visibleFrame
             origin.x = min(origin.x, screenFrame.maxX - contentView.frame.width)
             origin.x = max(origin.x, screenFrame.minX)
+
+            // If window would go below screen bottom, show above the cursor instead
+            if origin.y < screenFrame.minY {
+                origin.y = nearRect.maxY + 4
+            }
             origin.y = max(origin.y, screenFrame.minY)
+            origin.y = min(origin.y, screenFrame.maxY - contentView.frame.height)
         }
 
         panel.setFrameOrigin(origin)

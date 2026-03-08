@@ -151,31 +151,51 @@ class KarukanInputController: IMKInputController {
                     candidates.append((text, annotation))
                 }
 
-                // Get cursor position for candidate window placement
-                var lineRect = NSRect.zero
-                var charIndex = client.markedRange().location
-                if charIndex == NSNotFound {
-                    charIndex = client.selectedRange().location
-                }
-                if charIndex != NSNotFound {
-                    client.attributes(forCharacterIndex: charIndex, lineHeightRectangle: &lineRect)
-                }
-                // Fallback to mouse location if lineRect is invalid
-                if lineRect == NSRect.zero {
-                    let mouseLocation = NSEvent.mouseLocation
-                    lineRect = NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 0, height: 20)
-                }
-
+                let cursorRect = getCursorRect(client: client)
                 candidateWindow?.show(
                     candidates: candidates,
                     cursor: cursor,
-                    nearRect: lineRect
+                    nearRect: cursorRect
                 )
             }
         }
     }
 
     // MARK: - Helpers
+
+    /// Get the screen-space rectangle of the text cursor for candidate window placement.
+    /// Fallback chain: markedRange → selectedRange → mouse position.
+    private func getCursorRect(client: any IMKTextInput) -> NSRect {
+        // Step 1: Try markedRange (active preedit)
+        let markedRange = client.markedRange()
+        if markedRange.location != NSNotFound {
+            var actualRange = NSRange()
+            let rect = client.firstRect(
+                forCharacterRange: NSRange(location: markedRange.location, length: 0),
+                actualRange: &actualRange
+            )
+            if rect != NSRect.zero && rect.origin.x.isFinite && rect.origin.y.isFinite {
+                return rect
+            }
+        }
+
+        // Step 2: Try selectedRange (insertion point without preedit)
+        let selectedRange = client.selectedRange()
+        if selectedRange.location != NSNotFound {
+            var actualRange = NSRange()
+            let rect = client.firstRect(
+                forCharacterRange: NSRange(location: selectedRange.location, length: 0),
+                actualRange: &actualRange
+            )
+            if rect != NSRect.zero && rect.origin.x.isFinite && rect.origin.y.isFinite {
+                return rect
+            }
+        }
+
+        // Step 3: Fallback to mouse cursor position
+        let mouseLocation = NSEvent.mouseLocation
+        return NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 0, height: 20)
+    }
 
     private func getString(_ cstr: UnsafePointer<CChar>?) -> String {
         guard let cstr = cstr else { return "" }
