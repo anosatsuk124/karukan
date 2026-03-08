@@ -3,10 +3,10 @@ import InputMethodKit
 
 /// Main input controller for the Karukan input method.
 /// Each client application gets its own instance of this controller.
+@objc(KarukanInputController)
 class KarukanInputController: IMKInputController {
     private var engine: OpaquePointer?
     private var candidateWindow: KarukanCandidateWindow?
-    private var initializeTask: Task<Void, Never>?
 
     // MARK: - Lifecycle
 
@@ -17,7 +17,6 @@ class KarukanInputController: IMKInputController {
     }
 
     deinit {
-        initializeTask?.cancel()
         if let engine = engine {
             karukan_macos_engine_free(engine)
         }
@@ -25,13 +24,10 @@ class KarukanInputController: IMKInputController {
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
-        // Initialize engine in background to avoid blocking the main thread
         if let engine = engine {
-            initializeTask = Task.detached(priority: .userInitiated) {
-                let result = karukan_macos_engine_init(engine)
-                if result != 0 {
-                    NSLog("Karukan: Engine initialization failed")
-                }
+            let result = karukan_macos_engine_init(engine)
+            if result != 0 {
+                NSLog("Karukan: Engine initialization failed")
             }
         }
     }
