@@ -41,6 +41,14 @@ pub const GUID_DISPLAY_ATTRIBUTE_CONVERTED: GUID =
 pub const GUID_PRESERVED_KEY_ONOFF: GUID =
     GUID::from_u128(0xEBC7_F5A6_8D1E_4F51_BE3D_AF6C_9DAE_0B34);
 
+/// GUID for the Ctrl+Space preserved key (IME toggle alternative).
+///
+/// For keyboards without Hankaku/Zenkaku key.
+/// Generated UUID: {C3D4E5F6-7A8B-4C9D-AE1F-2B3C4D5E6F70}
+#[cfg(target_os = "windows")]
+pub const GUID_PRESERVED_KEY_CTRL_SPACE: GUID =
+    GUID::from_u128(0xC3D4_E5F6_7A8B_4C9D_AE1F_2B3C_4D5E_6F70);
+
 /// GUID for the Language Bar button item.
 ///
 /// Generated UUID: {FCD8A6B7-9E2F-4062-CF4E-BA7DAEBF1C45}

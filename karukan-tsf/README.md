@@ -39,6 +39,62 @@ regsvr32 target\release\karukan_tsf.dll
 regsvr32 /u target\release\karukan_tsf.dll
 ```
 
+## Usage
+
+### IME の ON/OFF 切り替え
+
+| キー | 動作 |
+|------|------|
+| 半角/全角 | IME の ON/OFF トグル |
+| Ctrl+Space | IME の ON/OFF トグル（半角/全角キーがないキーボード向け） |
+
+### 入力モード切り替え
+
+| キー | 動作 |
+|------|------|
+| Ctrl+K | カタカナモード（Composing 中） |
+| Ctrl+Shift+L | ライブ変換の ON/OFF |
+
+## Configuration
+
+設定ファイル: `%APPDATA%\karukan\karukan-im\config\config.toml`
+
+（例: `C:\Users\<ユーザー名>\AppData\Roaming\karukan\karukan-im\config\config.toml`）
+
+設定ファイルが存在しない場合、デフォルト値が使用されます。部分的な設定も可能です（指定した項目のみ上書き）。
+
+### SKK 風キーバインド
+
+SKK 風のモード切り替えキーバインドを使用できます:
+
+```toml
+[keybinding]
+profile = "skk"
+```
+
+| キー | 動作 |
+|------|------|
+| Ctrl+j | ひらがなモードに切り替え（どのモードからでも） |
+| l | アルファベットモードに切り替え（かなモード時） |
+| q | ひらがな ↔ カタカナをトグル（かなモード時） |
+| Ctrl+q | 半角カタカナモードに切り替え |
+
+### 設定例
+
+```toml
+[conversion]
+strategy = "adaptive"       # adaptive / light / main
+num_candidates = 9          # 変換候補数
+n_threads = 4               # 推論スレッド数（0 = 全コア）
+
+[keybinding]
+profile = "default"         # default / skk
+
+[learning]
+enabled = true              # 変換学習の有効/無効
+max_entries = 10000         # 学習エントリの最大数
+```
+
 ## License
 
 MIT OR Apache-2.0

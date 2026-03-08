@@ -9,7 +9,7 @@ use windows::core::*;
 
 use karukan_im::EngineAction;
 
-use crate::globals::GUID_PRESERVED_KEY_ONOFF;
+use crate::globals::{GUID_PRESERVED_KEY_CTRL_SPACE, GUID_PRESERVED_KEY_ONOFF};
 use crate::tsf::edit_session::ActionEditSession;
 use crate::tsf::lang_bar::KarukanLangBarButton;
 use crate::tsf::text_input_processor::KarukanTextService_Impl;
@@ -106,7 +106,7 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                 return Ok(FALSE);
             }
 
-            if *rguid != GUID_PRESERVED_KEY_ONOFF {
+            if *rguid != GUID_PRESERVED_KEY_ONOFF && *rguid != GUID_PRESERVED_KEY_CTRL_SPACE {
                 return Ok(FALSE);
             }
         }

@@ -10,8 +10,8 @@ use windows::core::*;
 use crate::candidate::window::CandidateWindow;
 use crate::engine_bridge::EngineBridge;
 use crate::globals::{
-    GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT, GUID_PRESERVED_KEY_ONOFF,
-    dll_add_ref, dll_release,
+    GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT, GUID_PRESERVED_KEY_CTRL_SPACE,
+    GUID_PRESERVED_KEY_ONOFF, dll_add_ref, dll_release,
 };
 use crate::tsf::compartment;
 use crate::tsf::lang_bar::KarukanLangBarButton;
@@ -124,6 +124,13 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
                             uModifiers: 0,
                         };
                         let _ = km.UnpreserveKey(&GUID_PRESERVED_KEY_ONOFF, &pk);
+
+                        // Unpreserve Ctrl+Space key
+                        let pk_ctrl_space = TF_PRESERVEDKEY {
+                            uVKey: 0x20,        // VK_SPACE
+                            uModifiers: 0x0004, // TF_MOD_CONTROL
+                        };
+                        let _ = km.UnpreserveKey(&GUID_PRESERVED_KEY_CTRL_SPACE, &pk_ctrl_space);
                     }
                 }
             }
@@ -245,6 +252,20 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
             };
             let desc: Vec<u16> = "karukan IME toggle".encode_utf16().collect();
             let _ = keystroke_mgr.PreserveKey(tid, &GUID_PRESERVED_KEY_ONOFF, &pk, &desc);
+
+            // Register preserved key: Ctrl+Space for IME toggle
+            // (alternative for keyboards without Hankaku/Zenkaku key)
+            let pk_ctrl_space = TF_PRESERVEDKEY {
+                uVKey: 0x20,        // VK_SPACE
+                uModifiers: 0x0004, // TF_MOD_CONTROL
+            };
+            let desc_cs: Vec<u16> = "karukan IME toggle".encode_utf16().collect();
+            let _ = keystroke_mgr.PreserveKey(
+                tid,
+                &GUID_PRESERVED_KEY_CTRL_SPACE,
+                &pk_ctrl_space,
+                &desc_cs,
+            );
         }
         self.inner.borrow_mut().keystroke_mgr_cookie = true;
 
