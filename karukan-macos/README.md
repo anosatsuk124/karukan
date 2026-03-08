@@ -34,6 +34,29 @@ killall KarukanInputMethod 2>/dev/null
 open ~/Library/Input\ Methods/Karukan.app
 ```
 
+## 辞書と設定
+
+### 設定ファイル
+
+`~/Library/Application Support/com.karukan.karukan-im/config.toml`
+
+### ユーザー辞書
+
+`~/Library/Application Support/com.karukan.karukan-im/user_dicts/` に辞書ファイルを配置すると、ユーザー辞書として読み込まれます（KRKNバイナリ・Mozc TSV・SKK辞書を自動判定）。
+
+SKK辞書の配置例:
+
+```bash
+mkdir -p ~/Library/Application\ Support/com.karukan.karukan-im/user_dicts
+cp SKK-JISYO.L ~/Library/Application\ Support/com.karukan.karukan-im/user_dicts/
+```
+
+### システム辞書
+
+`~/Library/Application Support/com.karukan.karukan-im/dict.bin`
+
+設定やキーバインドの詳細は [karukan-im の README](../karukan-im/README.md) を参照してください。
+
 ## 必要環境
 
 - macOS 14.0 以上

@@ -160,6 +160,8 @@ profile = "skk"
 | l | アルファベットモードに切り替え（かなモード時） |
 | q | ひらがな ↔ カタカナをトグル（かなモード時） |
 | Ctrl+q | 半角カタカナモードに切り替え |
+| / | abbrev（raw input）モードに入る（Emptyかつかなモード時） |
+| Space（abbrevモード中） | 辞書検索・変換（モデル推論スキップ） |
 
 ## Configuration
 
@@ -236,8 +238,16 @@ cp dict.bin ~/.local/share/karukan-im/
 ユーザー辞書ディレクトリにファイルを配置すると、ユーザー辞書として読み込まれます。
 
 - デフォルトパス: `~/.local/share/karukan-im/user_dicts/`
-- ディレクトリ内のファイルはすべて自動で読み込み（KRKNバイナリ・Mozc TSV を自動判定）
+- ディレクトリ内のファイルはすべて自動で読み込み（KRKNバイナリ・Mozc TSV・SKK辞書を自動判定）
+  - SKK辞書の検出条件: 先頭が `;;`、ファイル名に `SKK-JISYO` を含む、または `.skk` 拡張子
 - ディレクトリが存在しない場合はユーザー辞書なしで動作
+
+SKK辞書の配置例:
+
+```bash
+mkdir -p ~/.local/share/karukan-im/user_dicts
+cp SKK-JISYO.L ~/.local/share/karukan-im/user_dicts/
+```
 
 変換候補の優先順位:
 
