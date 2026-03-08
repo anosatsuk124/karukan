@@ -44,6 +44,13 @@ mod dll_exports {
         if reason == DLL_PROCESS_ATTACH {
             let _ = DLL_INSTANCE.set(SyncHmodule(HMODULE(hinstance.0)));
 
+            // Set panic hook to prevent panics from crashing the host process.
+            // COM DLL panics would otherwise unwind through foreign (C/C++) frames,
+            // which is undefined behavior and crashes the application.
+            std::panic::set_hook(Box::new(|info| {
+                eprintln!("karukan-tsf panic: {}", info);
+            }));
+
             // Initialize logging
             tracing_subscriber::fmt()
                 .with_env_filter(

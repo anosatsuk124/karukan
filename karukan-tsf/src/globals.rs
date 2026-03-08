@@ -78,6 +78,15 @@ pub fn dll_add_ref() {
 /// Decrement the global DLL reference count.
 #[cfg(target_os = "windows")]
 pub fn dll_release() {
+    // Guard against underflow: if count is already 0, do not subtract.
+    // AtomicUsize underflow wraps to usize::MAX, which would prevent DLL unload forever.
+    let prev = DLL_REF_COUNT.load(std::sync::atomic::Ordering::SeqCst);
+    if prev == 0 {
+        tracing::error!(
+            "DLL reference count underflow detected — release without matching add_ref"
+        );
+        return;
+    }
     DLL_REF_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
 }
 

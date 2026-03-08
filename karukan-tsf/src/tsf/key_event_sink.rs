@@ -106,41 +106,41 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                 return Ok(FALSE);
             }
 
-            if *rguid == GUID_PRESERVED_KEY_ONOFF {
-                let mut inner = self.inner.borrow_mut();
-                inner.enabled = !inner.enabled;
-                if !inner.enabled {
-                    // Commit pending text and reset when turning IME off
-                    let _committed = inner.engine.commit();
-                    inner.engine.reset();
-                    inner.composition = None;
-                    // Hide candidate window
-                    if let Some(ref cw) = inner.candidate_window {
-                        cw.borrow_mut().hide();
-                    }
-                }
-
-                // Sync compartment state
-                if let Some(ref thread_mgr) = inner.thread_mgr {
-                    let _ = crate::tsf::compartment::set_openclose_state(
-                        thread_mgr,
-                        inner.client_id,
-                        inner.enabled,
-                    );
-                }
-
-                // Update language bar
-                if let Some(ref item) = inner.lang_bar_item {
-                    let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
-                    button.update_mode(inner.engine.input_mode(), inner.enabled);
-                }
-
-                tracing::debug!("IME toggle: enabled={}", inner.enabled);
-                Ok(TRUE)
-            } else {
-                Ok(FALSE)
+            if *rguid != GUID_PRESERVED_KEY_ONOFF {
+                return Ok(FALSE);
             }
         }
+
+        // Phase 1: Update state and extract values (short borrow)
+        let (thread_mgr, client_id, enabled) = {
+            let mut inner = self.inner.borrow_mut();
+            inner.enabled = !inner.enabled;
+            if !inner.enabled {
+                // Commit pending text and reset when turning IME off
+                let _committed = inner.engine.commit();
+                inner.engine.reset();
+                inner.composition = None;
+                // Hide candidate window
+                if let Some(ref cw) = inner.candidate_window {
+                    cw.borrow_mut().hide();
+                }
+            }
+            let tm = inner.thread_mgr.clone();
+            let cid = inner.client_id;
+            let en = inner.enabled;
+            (tm, cid, en)
+        }; // borrow_mut dropped — safe for TSF callbacks
+
+        // Phase 2: Sync compartment state (may trigger OnChange callback)
+        if let Some(ref thread_mgr) = thread_mgr {
+            let _ = crate::tsf::compartment::set_openclose_state(thread_mgr, client_id, enabled);
+        }
+
+        // Phase 3: Update language bar
+        update_lang_bar_if_mode_changed(self);
+
+        tracing::debug!("IME toggle: enabled={}", enabled);
+        Ok(TRUE)
     }
 }
 
