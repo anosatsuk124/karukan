@@ -50,6 +50,9 @@ swiftc \
     -framework Cocoa \
     -framework InputMethodKit \
     -framework SwiftUI \
+    -framework Accelerate \
+    -framework Metal \
+    -framework MetalKit \
     -o "$BUILD_DIR/KarukanInputMethod" \
     "${SWIFT_SOURCES[@]}"
 
