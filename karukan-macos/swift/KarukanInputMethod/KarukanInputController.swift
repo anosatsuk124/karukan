@@ -102,6 +102,10 @@ class KarukanInputController: IMKInputController {
     private func processEngineResult(client: any IMKTextInput) {
         guard let engine = engine else { return }
 
+        // Get cursor position BEFORE any text changes (insertText/setMarkedText)
+        // so that firstRect() reads from a stable, already-laid-out state.
+        let cursorRect = getCursorRect(client: client)
+
         // Handle commit first (before preedit update)
         if karukan_macos_has_commit(engine) != 0 {
             let commitText = getString(karukan_macos_get_commit(engine))
@@ -151,7 +155,6 @@ class KarukanInputController: IMKInputController {
                     candidates.append((text, annotation))
                 }
 
-                let cursorRect = getCursorRect(client: client)
                 candidateWindow?.show(
                     candidates: candidates,
                     cursor: cursor,
@@ -168,12 +171,15 @@ class KarukanInputController: IMKInputController {
     private func getCursorRect(client: any IMKTextInput) -> NSRect {
         // Step 1: Try markedRange (active preedit)
         let markedRange = client.markedRange()
-        if markedRange.location != NSNotFound {
+        if markedRange.location != NSNotFound && markedRange.length > 0 {
             var actualRange = NSRange()
             let rect = client.firstRect(
-                forCharacterRange: NSRange(location: markedRange.location, length: 0),
+                forCharacterRange: markedRange,
                 actualRange: &actualRange
             )
+            NSLog("Karukan: getCursorRect markedRange=(%d,%d) rect=(%.1f,%.1f,%.1f,%.1f)",
+                  markedRange.location, markedRange.length,
+                  rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
             if rect != NSRect.zero && rect.origin.x.isFinite && rect.origin.y.isFinite {
                 return rect
             }
@@ -187,6 +193,9 @@ class KarukanInputController: IMKInputController {
                 forCharacterRange: NSRange(location: selectedRange.location, length: 0),
                 actualRange: &actualRange
             )
+            NSLog("Karukan: getCursorRect selectedRange=(%d,%d) rect=(%.1f,%.1f,%.1f,%.1f)",
+                  selectedRange.location, selectedRange.length,
+                  rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
             if rect != NSRect.zero && rect.origin.x.isFinite && rect.origin.y.isFinite {
                 return rect
             }
@@ -194,6 +203,7 @@ class KarukanInputController: IMKInputController {
 
         // Step 3: Fallback to mouse cursor position
         let mouseLocation = NSEvent.mouseLocation
+        NSLog("Karukan: getCursorRect fallback to mouse (%.1f,%.1f)", mouseLocation.x, mouseLocation.y)
         return NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 0, height: 20)
     }
 
