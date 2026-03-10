@@ -1,19 +1,41 @@
 import Cocoa
 import InputMethodKit
 
+// MARK: - Debug Logging
+
+#if DEBUG
+private func debugLog(_ message: String) {
+    let logDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/Karukan")
+    try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+    let logFile = logDir.appendingPathComponent("debug.log")
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(timestamp)] \(message)\n"
+    if let handle = try? FileHandle(forWritingTo: logFile) {
+        handle.seekToEndOfFile()
+        handle.write(line.data(using: .utf8)!)
+        handle.closeFile()
+    } else {
+        try? line.write(to: logFile, atomically: true, encoding: .utf8)
+    }
+}
+#endif
+
 /// Main input controller for the Karukan input method.
 /// Each client application gets its own instance of this controller.
 @objc(KarukanInputController)
 class KarukanInputController: IMKInputController {
     private var engine: OpaquePointer?
-    private var candidateWindow: KarukanCandidateWindow?
+    private var imkCandidates: IMKCandidates?
+    private var currentCandidates: [(String, String)] = []
+    private var currentCandidateCursor: Int = 0
 
     // MARK: - Lifecycle
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
         engine = karukan_macos_engine_new()
-        candidateWindow = KarukanCandidateWindow()
+        imkCandidates = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
     }
 
     deinit {
@@ -43,7 +65,7 @@ class KarukanInputController: IMKInputController {
             }
             karukan_macos_save_learning(engine)
         }
-        candidateWindow?.hide()
+        imkCandidates?.hide()
         super.deactivateServer(sender)
     }
 
@@ -97,14 +119,23 @@ class KarukanInputController: IMKInputController {
         return consumed != 0
     }
 
+    // MARK: - IMKCandidates Delegate
+
+    override func candidates(_ sender: Any!) -> [Any]! {
+        return currentCandidates.map { text, annotation in
+            annotation.isEmpty ? text : "\(text)  \(annotation)"
+        }
+    }
+
+    override func candidateSelected(_ candidateString: NSAttributedString!) {
+        guard let text = candidateString?.string, let client = self.client() else { return }
+        client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
     // MARK: - Engine Result Processing
 
     private func processEngineResult(client: any IMKTextInput) {
         guard let engine = engine else { return }
-
-        // Get cursor position BEFORE any text changes (insertText/setMarkedText)
-        // so that firstRect() reads from a stable, already-laid-out state.
-        let cursorRect = getCursorRect(client: client)
 
         // Handle commit first (before preedit update)
         if karukan_macos_has_commit(engine) != 0 {
@@ -144,68 +175,22 @@ class KarukanInputController: IMKInputController {
         // Handle candidates
         if karukan_macos_has_candidates(engine) != 0 {
             if karukan_macos_should_hide_candidates(engine) != 0 {
-                candidateWindow?.hide()
+                imkCandidates?.hide()
             } else {
                 let count = Int(karukan_macos_get_candidate_count(engine))
-                let cursor = Int(karukan_macos_get_candidate_cursor(engine))
-                var candidates: [(String, String)] = []
-                for i in 0..<count {
+                currentCandidateCursor = Int(karukan_macos_get_candidate_cursor(engine))
+                currentCandidates = (0..<count).map { i in
                     let text = getString(karukan_macos_get_candidate(engine, UInt32(i)))
                     let annotation = getString(karukan_macos_get_candidate_annotation(engine, UInt32(i)))
-                    candidates.append((text, annotation))
+                    return (text, annotation)
                 }
-
-                candidateWindow?.show(
-                    candidates: candidates,
-                    cursor: cursor,
-                    nearRect: cursorRect
-                )
+                imkCandidates?.update()
+                imkCandidates?.show(kIMKLocateCandidatesBelowHint)
             }
         }
     }
 
     // MARK: - Helpers
-
-    /// Get the screen-space rectangle of the text cursor for candidate window placement.
-    /// Fallback chain: markedRange → selectedRange → mouse position.
-    private func getCursorRect(client: any IMKTextInput) -> NSRect {
-        // Step 1: Try markedRange (active preedit)
-        let markedRange = client.markedRange()
-        if markedRange.location != NSNotFound && markedRange.length > 0 {
-            var actualRange = NSRange()
-            let rect = client.firstRect(
-                forCharacterRange: markedRange,
-                actualRange: &actualRange
-            )
-            NSLog("Karukan: getCursorRect markedRange=(%d,%d) rect=(%.1f,%.1f,%.1f,%.1f)",
-                  markedRange.location, markedRange.length,
-                  rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
-            if rect != NSRect.zero && rect.origin.x.isFinite && rect.origin.y.isFinite {
-                return rect
-            }
-        }
-
-        // Step 2: Try selectedRange (insertion point without preedit)
-        let selectedRange = client.selectedRange()
-        if selectedRange.location != NSNotFound {
-            var actualRange = NSRange()
-            let rect = client.firstRect(
-                forCharacterRange: NSRange(location: selectedRange.location, length: 0),
-                actualRange: &actualRange
-            )
-            NSLog("Karukan: getCursorRect selectedRange=(%d,%d) rect=(%.1f,%.1f,%.1f,%.1f)",
-                  selectedRange.location, selectedRange.length,
-                  rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
-            if rect != NSRect.zero && rect.origin.x.isFinite && rect.origin.y.isFinite {
-                return rect
-            }
-        }
-
-        // Step 3: Fallback to mouse cursor position
-        let mouseLocation = NSEvent.mouseLocation
-        NSLog("Karukan: getCursorRect fallback to mouse (%.1f,%.1f)", mouseLocation.x, mouseLocation.y)
-        return NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 0, height: 20)
-    }
 
     private func getString(_ cstr: UnsafePointer<CChar>?) -> String {
         guard let cstr = cstr else { return "" }

@@ -157,7 +157,7 @@ cargo clippy --workspace  # Lint all crates
 - `engine_bridge.rs` — EngineBridge wrapper (same pattern as karukan-tsf)
 - `keymap.rs` — macOS Carbon key code → Keysym mapping
 - `ffi.rs` — C FFI for Swift IMKit integration
-- `swift/KarukanInputMethod/` — Swift IMKit app (IMKInputController, candidate window, settings)
+- `swift/KarukanInputMethod/` — Swift IMKit app (IMKInputController, IMKCandidates, settings)
 - `include/karukan_macos.h` — C FFI header
 - `scripts/` — Build and install scripts
 

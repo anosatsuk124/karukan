@@ -36,13 +36,18 @@ mkdir -p "$BUILD_DIR"
 SWIFT_SOURCES=(
     "$SWIFT_DIR/main.swift"
     "$SWIFT_DIR/KarukanInputController.swift"
-    "$SWIFT_DIR/KarukanCandidateWindow.swift"
     "$SWIFT_DIR/SettingsView.swift"
 )
 
+SWIFT_FLAGS="-O"
+if [ "${KARUKAN_DEBUG:-}" = "1" ]; then
+    SWIFT_FLAGS="-D DEBUG -Onone -g"
+    echo "    (DEBUG mode enabled)"
+fi
+
 swiftc \
     -target "${ARCH}-apple-macosx14.0" \
-    -O \
+    $SWIFT_FLAGS \
     -import-objc-header "$INCLUDE_DIR/karukan_macos.h" \
     -L "$(dirname "$STATIC_LIB")" \
     -lkarukan_macos \
