@@ -81,6 +81,29 @@ impl InputMethodEngine {
         None
     }
 
+    /// Commit conversion state and clean up for mode switching.
+    /// Returns EngineResult with Commit + HideCandidates + HideAuxText + UpdatePreedit(empty).
+    /// If not in Conversion state, returns a consumed result with no actions.
+    fn commit_conversion_for_mode_switch(&mut self) -> EngineResult {
+        let mut result = EngineResult::consumed();
+
+        if let Some((text, reading)) = self.selected_conversion_info()
+            && !text.is_empty()
+        {
+            if let Some(reading) = &reading {
+                self.record_learning(reading, &text);
+            }
+            result = result.with_action(EngineAction::Commit(text));
+        }
+
+        self.input_buf.clear();
+        self.state = InputState::Empty;
+        result
+            .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::HideAuxText)
+    }
+
     /// Zenkaku/Hankaku: toggle between hiragana and alphabet mode
     fn skk_toggle_kana_alphabet(&mut self) -> EngineResult {
         if self.input_mode == InputMode::Alphabet {
@@ -94,6 +117,14 @@ impl InputMethodEngine {
     fn skk_enter_hiragana(&mut self) -> EngineResult {
         if self.input_mode == InputMode::Hiragana {
             return EngineResult::consumed();
+        }
+
+        // Conversion状態: 変換を確定してからひらがなモードへ
+        if matches!(self.state, InputState::Conversion { .. }) {
+            let result = self.commit_conversion_for_mode_switch();
+            self.input_mode = InputMode::Hiragana;
+            let aux = self.format_aux_composing();
+            return result.with_action(EngineAction::UpdateAuxText(aux));
         }
 
         // Bake current mode text before switching
@@ -117,11 +148,13 @@ impl InputMethodEngine {
         EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
     }
 
-    /// l key: commit composing text and switch to alphabet mode
+    /// l key: commit composing/conversion text and switch to alphabet mode
     fn skk_enter_alphabet(&mut self) -> EngineResult {
         let mut result = EngineResult::consumed();
 
-        if matches!(self.state, InputState::Composing { .. }) {
+        if matches!(self.state, InputState::Conversion { .. }) {
+            result = self.commit_conversion_for_mode_switch();
+        } else if matches!(self.state, InputState::Composing { .. }) {
             self.flush_romaji_to_composed();
             let reading = self.input_buf.text.clone();
             let text = if self.input_mode == InputMode::Katakana {
@@ -143,6 +176,7 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             result = result
                 .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+                .with_action(EngineAction::HideCandidates)
                 .with_action(EngineAction::HideAuxText);
         }
 
@@ -152,8 +186,23 @@ impl InputMethodEngine {
     }
 
     /// q key: in composing state, convert to katakana and commit immediately;
+    /// in conversion state, commit conversion and toggle mode;
     /// in empty state, toggle between hiragana and katakana mode.
     fn skk_toggle_katakana(&mut self) -> EngineResult {
+        // Conversion中は変換を確定してからモード切替
+        if matches!(self.state, InputState::Conversion { .. }) {
+            let result = self.commit_conversion_for_mode_switch();
+            let new_mode = if self.input_mode == InputMode::Katakana {
+                InputMode::Hiragana
+            } else {
+                InputMode::Katakana
+            };
+            self.input_mode = new_mode;
+            self.live.text.clear();
+            let aux = self.format_aux_composing();
+            return result.with_action(EngineAction::UpdateAuxText(aux));
+        }
+
         // Composing中はカタカナに変換して即確定
         if matches!(self.state, InputState::Composing { .. }) {
             return self.skk_commit_as_katakana();
@@ -185,6 +234,7 @@ impl InputMethodEngine {
 
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+            .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::Commit(text))
             .with_action(EngineAction::HideAuxText)
     }
@@ -203,13 +253,24 @@ impl InputMethodEngine {
 
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+            .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::Commit(text))
             .with_action(EngineAction::HideAuxText)
     }
 
     /// Ctrl+q: in composing state, convert to half-width katakana and commit;
+    /// in conversion state, commit conversion and switch mode;
     /// in empty state, switch to half-width katakana mode.
     fn skk_enter_halfwidth_katakana(&mut self) -> EngineResult {
+        // Conversion中は変換を確定してから半角カタカナモードへ
+        if matches!(self.state, InputState::Conversion { .. }) {
+            let result = self.commit_conversion_for_mode_switch();
+            self.input_mode = InputMode::HalfWidthKatakana;
+            self.live.text.clear();
+            let aux = self.format_aux_composing();
+            return result.with_action(EngineAction::UpdateAuxText(aux));
+        }
+
         // Composing中は半角カタカナに変換して即確定
         if matches!(self.state, InputState::Composing { .. }) {
             return self.skk_commit_as_halfwidth_katakana();

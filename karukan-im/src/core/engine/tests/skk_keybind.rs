@@ -1,5 +1,6 @@
 use super::*;
 use crate::config::settings::KeybindingProfile;
+use crate::core::candidate::{Candidate, CandidateList};
 
 fn make_skk_engine() -> InputMethodEngine {
     let config = EngineConfig {
@@ -7,6 +8,27 @@ fn make_skk_engine() -> InputMethodEngine {
         ..EngineConfig::default()
     };
     InputMethodEngine::with_config(config)
+}
+
+/// Set engine to Conversion state with given reading and candidates
+fn set_conversion_state(engine: &mut InputMethodEngine, reading: &str, candidates: &[&str]) {
+    engine.input_buf.text = reading.to_string();
+    engine.input_buf.cursor_pos = reading.chars().count();
+    let candidate_list = CandidateList::new(
+        candidates
+            .iter()
+            .enumerate()
+            .map(|(i, &text)| Candidate::with_reading(text, reading).with_index(i))
+            .collect(),
+    );
+    engine.state = InputState::Conversion {
+        preedit: Preedit::with_text(candidates[0]),
+        candidates: candidate_list,
+    };
+}
+
+fn has_action(result: &EngineResult, check: impl Fn(&EngineAction) -> bool) -> bool {
+    result.actions.iter().any(|a| check(a))
 }
 
 #[test]
@@ -305,4 +327,119 @@ fn test_skk_henkan_from_alphabet() {
     let result = engine.process_key(&press_key(Keysym::HENKAN));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+// --- HideCandidates tests for mode switching ---
+
+#[test]
+fn test_skk_l_in_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+}
+
+#[test]
+fn test_skk_l_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+}
+
+#[test]
+fn test_skk_q_in_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    let result = engine.process_key(&press('q'));
+    assert!(result.consumed);
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+}
+
+#[test]
+fn test_skk_q_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press('q'));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+}
+
+#[test]
+fn test_skk_ctrl_q_in_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+}
+
+#[test]
+fn test_skk_ctrl_q_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
+}
+
+#[test]
+fn test_skk_ctrl_j_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Katakana;
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_zenkaku_hankaku_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
 }
