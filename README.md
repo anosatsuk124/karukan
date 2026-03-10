@@ -38,6 +38,10 @@
 - **Windows (TSF)**: [karukan-tsf の README](karukan-tsf/README.md#build) を参照
 - **macOS (IMKit)**: [karukan-macos の README](karukan-macos/README.md) を参照
 
+## 既知の問題
+
+- **macOS: WezTerm で SKK モードの Ctrl+J が効かない** — [karukan-macos の回避策](karukan-macos/README.md#wezterm-で-skk-モードの-ctrlj-が効かない) を参照
+
 ## ライセンス
 
 MIT OR Apache-2.0 のデュアルライセンスで提供しています。

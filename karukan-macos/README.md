@@ -74,6 +74,51 @@ max_entries = 10000
 | 学習キャッシュ | `~/Library/Application Support/com.karukan.karukan-im/learning.tsv` | `~/.local/share/karukan-im/learning.tsv` |
 | ユーザー辞書 | `~/Library/Application Support/com.karukan.karukan-im/user_dicts/` | `~/.local/share/karukan-im/user_dicts/` |
 
+## 既知の問題と回避策
+
+### WezTerm で SKK モードの Ctrl+J が効かない
+
+macOS 版の WezTerm では `Ctrl+J` が IME に渡されないため、SKK モード（`[keybinding] profile = "skk"`）でのひらがなモード切り替えができません。
+
+[Karabiner-Elements](https://karabiner-elements.pqrs.org/) を使い、WezTerm 上でのみ `Ctrl+J` を「かな」キーにリマップすることで回避できます。「かな」キーは `Ctrl+J` と同じくひらがなモードへの切り替えとして動作します。
+
+`~/.config/karabiner/assets/complex_modifications/` に以下の JSON ファイルを配置し、Karabiner-Elements の設定画面から有効化してください。
+
+```json
+{
+  "title": "Karukan SKK: Ctrl+J to Kana key (WezTerm only)",
+  "rules": [
+    {
+      "description": "Remap Ctrl+J to Kana key in WezTerm for Karukan SKK mode",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "j",
+            "modifiers": {
+              "mandatory": ["control"]
+            }
+          },
+          "to": [
+            {
+              "key_code": "japanese_kana"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.github\\.wez\\.wezterm$"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## 必要環境
 
 - macOS 14.0 以上
