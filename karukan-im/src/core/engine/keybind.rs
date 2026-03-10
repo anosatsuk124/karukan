@@ -56,24 +56,28 @@ impl InputMethodEngine {
             return Some(self.skk_enter_halfwidth_katakana());
         }
 
-        // l (no modifiers, in kana mode) → enter alphabet mode
+        // l (no modifiers, in kana mode, no pending romaji) → enter alphabet mode
+        // When romaji buffer has content (e.g. "z"), let 'l' pass through to romaji
+        // converter so that "zl" can produce "→"
         if key.keysym == Keysym::KEY_L
             && key.modifiers.is_empty()
             && matches!(
                 self.input_mode,
                 InputMode::Hiragana | InputMode::Katakana | InputMode::HalfWidthKatakana
             )
+            && self.converters.romaji.buffer().is_empty()
         {
             return Some(self.skk_enter_alphabet());
         }
 
-        // q (no modifiers, in kana mode) → toggle katakana
+        // q (no modifiers, in kana mode, no pending romaji) → toggle katakana
         if key.keysym == Keysym::KEY_Q
             && key.modifiers.is_empty()
             && matches!(
                 self.input_mode,
                 InputMode::Hiragana | InputMode::Katakana | InputMode::HalfWidthKatakana
             )
+            && self.converters.romaji.buffer().is_empty()
         {
             return Some(self.skk_toggle_katakana());
         }
