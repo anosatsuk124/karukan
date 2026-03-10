@@ -339,7 +339,10 @@ fn test_skk_l_in_composing_hides_candidates() {
 
     let result = engine.process_key(&press('l'));
     assert!(result.consumed);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -355,7 +358,10 @@ fn test_skk_l_in_conversion_commits_and_hides() {
         a,
         EngineAction::Commit(t) if t == "今日"
     )));
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -366,7 +372,10 @@ fn test_skk_q_in_composing_hides_candidates() {
 
     let result = engine.process_key(&press('q'));
     assert!(result.consumed);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -381,7 +390,10 @@ fn test_skk_q_in_conversion_commits_and_hides() {
         a,
         EngineAction::Commit(t) if t == "今日"
     )));
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -392,7 +404,10 @@ fn test_skk_ctrl_q_in_composing_hides_candidates() {
 
     let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
     assert!(result.consumed);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -407,7 +422,10 @@ fn test_skk_ctrl_q_in_conversion_commits_and_hides() {
         a,
         EngineAction::Commit(t) if t == "今日"
     )));
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
     assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
 }
 
@@ -424,7 +442,10 @@ fn test_skk_ctrl_j_in_conversion_commits_and_hides() {
         a,
         EngineAction::Commit(t) if t == "今日"
     )));
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
     assert_eq!(engine.input_mode, InputMode::Hiragana);
 }
 
@@ -440,7 +461,10 @@ fn test_skk_zenkaku_hankaku_in_conversion_commits_and_hides() {
         a,
         EngineAction::Commit(t) if t == "今日"
     )));
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
     assert_eq!(engine.input_mode, InputMode::Alphabet);
 }
 
@@ -458,7 +482,10 @@ fn test_commit_composing_hides_candidates() {
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -469,7 +496,10 @@ fn test_skk_l_in_empty_hides_candidates() {
     let result = engine.process_key(&press('l'));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Alphabet);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -480,7 +510,10 @@ fn test_skk_q_in_empty_hides_candidates() {
     let result = engine.process_key(&press('q'));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Katakana);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -491,7 +524,10 @@ fn test_skk_ctrl_q_in_empty_hides_candidates() {
     let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -503,7 +539,10 @@ fn test_skk_ctrl_j_in_empty_from_katakana_hides_candidates() {
     let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Hiragana);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 #[test]
@@ -515,7 +554,10 @@ fn test_skk_ctrl_j_noop_in_hiragana_hides_candidates() {
     let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Hiragana);
-    assert!(has_action(&result, |a| matches!(a, EngineAction::HideCandidates)));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
 }
 
 // --- z+hjkl arrow symbol tests ---

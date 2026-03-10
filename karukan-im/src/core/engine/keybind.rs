@@ -120,8 +120,7 @@ impl InputMethodEngine {
     /// Ctrl+j: switch to hiragana mode from any mode
     fn skk_enter_hiragana(&mut self) -> EngineResult {
         if self.input_mode == InputMode::Hiragana {
-            return EngineResult::consumed()
-                .with_action(EngineAction::HideCandidates);
+            return EngineResult::consumed().with_action(EngineAction::HideCandidates);
         }
 
         // Conversion状態: 変換を確定してからひらがなモードへ
@@ -289,8 +288,7 @@ impl InputMethodEngine {
 
         // Empty状態ではモード切替
         if self.input_mode == InputMode::HalfWidthKatakana {
-            return EngineResult::consumed()
-                .with_action(EngineAction::HideCandidates);
+            return EngineResult::consumed().with_action(EngineAction::HideCandidates);
         }
         if self.input_mode == InputMode::Katakana {
             self.bake_katakana();
