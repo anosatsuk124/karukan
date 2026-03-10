@@ -116,7 +116,8 @@ impl InputMethodEngine {
     /// Ctrl+j: switch to hiragana mode from any mode
     fn skk_enter_hiragana(&mut self) -> EngineResult {
         if self.input_mode == InputMode::Hiragana {
-            return EngineResult::consumed();
+            return EngineResult::consumed()
+                .with_action(EngineAction::HideCandidates);
         }
 
         // Conversion状態: 変換を確定してからひらがなモードへ
@@ -145,7 +146,9 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdatePreedit(preedit))
                 .with_action(EngineAction::UpdateAuxText(aux));
         }
-        EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
+        EngineResult::consumed()
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::UpdateAuxText(aux))
     }
 
     /// l key: commit composing/conversion text and switch to alphabet mode
@@ -182,7 +185,9 @@ impl InputMethodEngine {
 
         self.input_mode = InputMode::Alphabet;
         let aux = self.format_aux_composing();
-        result.with_action(EngineAction::UpdateAuxText(aux))
+        result
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::UpdateAuxText(aux))
     }
 
     /// q key: in composing state, convert to katakana and commit immediately;
@@ -217,7 +222,9 @@ impl InputMethodEngine {
         self.input_mode = new_mode;
         self.live.text.clear();
         let aux = self.format_aux_composing();
-        EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
+        EngineResult::consumed()
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::UpdateAuxText(aux))
     }
 
     /// Convert composing text to katakana and commit immediately
@@ -278,7 +285,8 @@ impl InputMethodEngine {
 
         // Empty状態ではモード切替
         if self.input_mode == InputMode::HalfWidthKatakana {
-            return EngineResult::consumed();
+            return EngineResult::consumed()
+                .with_action(EngineAction::HideCandidates);
         }
         if self.input_mode == InputMode::Katakana {
             self.bake_katakana();
@@ -286,6 +294,8 @@ impl InputMethodEngine {
         self.input_mode = InputMode::HalfWidthKatakana;
         self.live.text.clear();
         let aux = self.format_aux_composing();
-        EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
+        EngineResult::consumed()
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::UpdateAuxText(aux))
     }
 }
