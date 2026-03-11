@@ -195,10 +195,11 @@ impl Settings {
         }
 
         if let Some(parent) = config_file.parent()
-            && let Err(e) = fs::create_dir_all(parent) {
-                warn!("Failed to create config directory {:?}: {}", parent, e);
-                return Some(config_file);
-            }
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            warn!("Failed to create config directory {:?}: {}", parent, e);
+            return Some(config_file);
+        }
 
         match fs::write(&config_file, DEFAULT_CONFIG_TOML) {
             Ok(()) => {
