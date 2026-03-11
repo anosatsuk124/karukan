@@ -33,7 +33,6 @@ impl ITfThreadMgrEventSink_Impl for KarukanTextService_Impl {
 
         // Reset engine state when focus changes to avoid stale state
         inner.engine.reset();
-        inner.cached_result = None;
         inner.composition = None;
 
         // Hide candidate window

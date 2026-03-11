@@ -72,6 +72,23 @@ pub const GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT: GUID =
 pub const GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT: GUID =
     GUID::from_u128(0x2550_4FB4_7BAB_4BC1_9C69_CF81_890F_0EF5);
 
+/// GUID for secure mode capability.
+///
+/// Required for IME to receive key events in modern/UWP apps on Windows 8+.
+/// Without this, the IME appears in the language bar but keys are not dispatched.
+/// {49D2F9CE-1F5E-11D7-A6D3-00065B84435C}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_SECUREMODE: GUID =
+    GUID::from_u128(0x49D2_F9CE_1F5E_11D7_A6D3_0006_5B84_435C);
+
+/// GUID for UI element enabled capability.
+///
+/// Required for proper UI element handling in modern apps.
+/// {49D2F9CF-1F5E-11D7-A6D3-00065B84435C}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_UIELEMENTENABLED: GUID =
+    GUID::from_u128(0x49D2_F9CF_1F5E_11D7_A6D3_0006_5B84_435C);
+
 /// Japanese language ID (LANGID 0x0411 = Japanese)
 pub const LANGID_JAPANESE: u16 = 0x0411;
 

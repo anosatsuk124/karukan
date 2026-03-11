@@ -23,8 +23,8 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
 
     /// Called before OnKeyDown — determines if the key will be consumed.
     ///
-    /// We process the key through the engine here and cache the result.
-    /// If consumed, TSF will call OnKeyDown where we apply the cached actions.
+    /// Uses `would_consume_key` for side-effect-free filtering. The actual
+    /// engine state change happens in `OnKeyDown`.
     fn OnTestKeyDown(
         &self,
         _pic: Option<&ITfContext>,
@@ -36,8 +36,34 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
         if !inner.enabled {
             return Ok(FALSE);
         }
-        drop(inner);
 
+        let vk = wparam.0 as u32;
+        let (shift, control, alt, win) = get_modifier_state();
+        let unicode_char = vk_to_unicode(vk, shift);
+
+        let consumed =
+            inner
+                .engine
+                .would_consume_key(vk, unicode_char, shift, control, alt, win, true);
+
+        tracing::debug!(
+            "OnTestKeyDown: vk=0x{:02X} unicode={:?} shift={} ctrl={} alt={} → consumed={}",
+            vk,
+            unicode_char,
+            shift,
+            control,
+            alt,
+            consumed
+        );
+
+        Ok(BOOL::from(consumed))
+    }
+
+    /// Called when a key is pressed and OnTestKeyDown returned TRUE.
+    ///
+    /// Processes the key through the engine (state change happens here)
+    /// and applies actions via an EditSession.
+    fn OnKeyDown(&self, pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = wparam.0 as u32;
         let (shift, control, alt, win) = get_modifier_state();
         let unicode_char = vk_to_unicode(vk, shift);
@@ -47,41 +73,26 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
             .engine
             .process_key(vk, unicode_char, shift, control, alt, win, true);
 
-        let consumed = result.consumed;
-        inner.cached_result = Some(result);
+        tracing::debug!(
+            "OnKeyDown: vk=0x{:02X} → consumed={} actions={}",
+            vk,
+            result.consumed,
+            result.actions.len()
+        );
 
-        Ok(BOOL::from(consumed))
-    }
+        if result.consumed
+            && !result.actions.is_empty()
+            && let Some(context) = pic
+        {
+            drop(inner); // Release borrow before edit session
+            apply_engine_actions(self, context, &result.actions)?;
 
-    /// Called when a key is pressed and OnTestKeyDown returned TRUE.
-    ///
-    /// Applies the cached EngineResult actions via an EditSession.
-    fn OnKeyDown(
-        &self,
-        pic: Option<&ITfContext>,
-        _wparam: WPARAM,
-        _lparam: LPARAM,
-    ) -> Result<BOOL> {
-        let mut inner = self.inner.borrow_mut();
+            // Check for mode changes and update language bar
+            update_lang_bar_if_mode_changed(self);
 
-        if let Some(result) = inner.cached_result.take() {
-            if result.consumed
-                && !result.actions.is_empty()
-                && let Some(context) = pic
-            {
-                drop(inner); // Release borrow before edit session
-                apply_engine_actions(self, context, &result.actions)?;
-
-                // Check for mode changes and update language bar
-                update_lang_bar_if_mode_changed(self);
-
-                return Ok(TRUE);
-            }
-            Ok(BOOL::from(result.consumed))
-        } else {
-            // No cached result — should not happen, but handle gracefully
-            Ok(FALSE)
+            return Ok(TRUE);
         }
+        Ok(BOOL::from(result.consumed))
     }
 
     /// Called before OnKeyUp — we generally don't consume key-up events.
@@ -232,9 +243,13 @@ fn apply_engine_actions(
     unsafe {
         let hr =
             context.RequestEditSession(client_id, &edit_session, TF_ES_SYNC | TF_ES_READWRITE)?;
-        // Check the edit session result
+        tracing::debug!("RequestEditSession result: {:?}", hr);
         if hr.is_err() {
-            tracing::warn!("Edit session failed: {:?}", hr);
+            // Sync|ReadWrite may be rejected in modern apps; try async as fallback
+            tracing::warn!(
+                "Edit session failed with TF_ES_SYNC|TF_ES_READWRITE: {:?}",
+                hr
+            );
         }
     }
 

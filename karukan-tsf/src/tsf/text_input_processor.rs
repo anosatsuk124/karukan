@@ -44,8 +44,8 @@ pub(crate) struct KarukanTextServiceInner {
     pub(crate) keystroke_mgr_cookie: bool,
     /// Cookie for ITfCompartmentEventSink on GUID_COMPARTMENT_KEYBOARD_OPENCLOSE
     pub(crate) compartment_sink_cookie: u32,
-    /// Cached EngineResult from OnTestKeyDown for reuse in OnKeyDown
-    pub(crate) cached_result: Option<karukan_im::EngineResult>,
+    /// Flags passed to ActivateEx (e.g. TF_TMAE_UIELEMENTENABLEDONLY)
+    pub(crate) activate_flags: u32,
     /// Whether the IME is enabled (toggled via PreservedKey)
     pub(crate) enabled: bool,
     /// Candidate window for displaying conversion candidates
@@ -73,7 +73,7 @@ impl KarukanTextService {
                 thread_mgr_sink_cookie: TF_INVALID_COOKIE,
                 keystroke_mgr_cookie: false,
                 compartment_sink_cookie: TF_INVALID_COOKIE,
-                cached_result: None,
+                activate_flags: 0,
                 enabled: true,
                 candidate_window: None,
                 lang_bar_item: None,
@@ -193,14 +193,17 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
 
 // ITfTextInputProcessorEx implementation
 impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
-    fn ActivateEx(&self, ptim: Option<&ITfThreadMgr>, tid: u32, _dwflags: u32) -> Result<()> {
+    fn ActivateEx(&self, ptim: Option<&ITfThreadMgr>, tid: u32, dwflags: u32) -> Result<()> {
         let thread_mgr = ptim.ok_or(E_INVALIDARG)?;
+
+        tracing::debug!("ActivateEx: tid={} dwflags=0x{:08X}", tid, dwflags);
 
         // Phase 1: Initialize engine and basic state (short borrow, no TSF callbacks)
         {
             let mut inner = self.inner.borrow_mut();
             inner.thread_mgr = Some(thread_mgr.clone());
             inner.client_id = tid;
+            inner.activate_flags = dwflags;
 
             // Initialize the engine (loads models, dictionaries, learning cache)
             if let Err(e) = inner.engine.initialize() {
@@ -233,8 +236,15 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
                 }
             }
 
-            // Create candidate window
-            inner.candidate_window = Some(Rc::new(RefCell::new(CandidateWindow::new())));
+            // Create candidate window (skip in UI-element-enabled-only mode)
+            const TF_TMAE_UIELEMENTENABLEDONLY: u32 = 0x4;
+            if dwflags & TF_TMAE_UIELEMENTENABLEDONLY == 0 {
+                inner.candidate_window = Some(Rc::new(RefCell::new(CandidateWindow::new())));
+            } else {
+                tracing::debug!(
+                    "ActivateEx: TF_TMAE_UIELEMENTENABLEDONLY set, skipping candidate window"
+                );
+            }
             inner.enabled = true;
         } // borrow_mut dropped here — TSF callbacks are now safe
 

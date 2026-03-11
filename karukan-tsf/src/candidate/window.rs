@@ -33,11 +33,7 @@ const WINDOW_CLASS_NAME: PCWSTR = w!("KarukanCandidateWindow");
 fn dpi_scale(hwnd: HWND) -> f64 {
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     let dpi = unsafe { GetDpiForWindow(hwnd) };
-    if dpi == 0 {
-        1.0
-    } else {
-        dpi as f64 / 96.0
-    }
+    if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 }
 }
 
 /// Scale a pixel value by the DPI scale factor.
@@ -216,14 +212,13 @@ fn register_window_class() {
 fn create_candidate_window() -> HWND {
     unsafe {
         use windows::Win32::UI::HiDpi::{
-            SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
         };
 
         // Temporarily set per-monitor DPI awareness for this window creation.
         // This ensures GetDpiForWindow returns correct per-monitor DPI values
         // even if the host application is DPI-unaware.
-        let prev_context =
-            SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let prev_context = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,

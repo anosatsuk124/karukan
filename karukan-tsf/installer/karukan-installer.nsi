@@ -28,6 +28,9 @@ Section "Install"
   ; Register COM/TSF via DllRegisterServer
   ExecWait 'regsvr32 /s "$INSTDIR\karukan_tsf.dll"'
 
+  ; Grant read+execute to AppContainer apps (UWP/modern apps)
+  ExecWait 'icacls "$INSTDIR\karukan_tsf.dll" /grant *S-1-15-2-1:(RX)'
+
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 

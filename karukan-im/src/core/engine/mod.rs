@@ -359,6 +359,147 @@ impl InputMethodEngine {
         Some(EngineResult::not_consumed())
     }
 
+    /// Determine whether a key event would be consumed without changing engine state.
+    ///
+    /// This is used by TSF's `OnTestKeyDown` to report whether the key will be handled,
+    /// without actually processing it. The real processing happens in `process_key`
+    /// during `OnKeyDown`.
+    pub fn would_consume_key(&self, key: &KeyEvent) -> bool {
+        // Modifier-only keys are never consumed
+        if key.keysym.is_modifier() {
+            // Exception: mode toggle keys (Alt_R, Super_R, etc.) are consumed
+            // when actually switching mode
+            if key.keysym.is_mode_toggle_key()
+                && key.is_press
+                && self.input_mode != InputMode::Hiragana
+            {
+                return true;
+            }
+            return false;
+        }
+
+        // Only key presses are consumed (releases pass through)
+        if !key.is_press {
+            return false;
+        }
+
+        // Ctrl+Shift+L: live conversion toggle (works in all states)
+        if key.modifiers.control_key
+            && key.modifiers.shift_key
+            && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
+        {
+            return true;
+        }
+
+        // SKK keybinding check
+        if self.config.keybinding_profile == KeybindingProfile::Skk {
+            // Ctrl+J is always consumed in SKK mode
+            if key.modifiers.control_key
+                && !key.modifiers.shift_key
+                && (key.keysym == Keysym::KEY_J || key.keysym == Keysym::KEY_J_UPPER)
+            {
+                return true;
+            }
+            // Henkan/Muhenkan pass through in SKK
+            if matches!(key.keysym, Keysym::HENKAN | Keysym::MUHENKAN) {
+                return false;
+            }
+            // SKK alphabet mode: only Ctrl+J is consumed (handled above)
+            if self.input_mode == InputMode::Alphabet {
+                return false;
+            }
+            // SKK-specific keys (l, q, Ctrl+q) in kana modes
+            if key.keysym == Keysym::KEY_L && key.modifiers.is_empty() {
+                return true;
+            }
+            if key.keysym == Keysym::KEY_Q && key.modifiers.is_empty() {
+                return true;
+            }
+            if key.modifiers.control_key
+                && !key.modifiers.shift_key
+                && (key.keysym == Keysym::KEY_Q || key.keysym == Keysym::KEY_Q_UPPER)
+            {
+                return true;
+            }
+        }
+
+        // SKK alphabet mode passes all other keys through
+        if self.config.keybinding_profile == KeybindingProfile::Skk
+            && self.input_mode == InputMode::Alphabet
+        {
+            return false;
+        }
+
+        match &self.state {
+            InputState::Empty => {
+                // Ctrl+Space: full-width space
+                if key.modifiers.control_key && key.keysym == Keysym::SPACE {
+                    return true;
+                }
+                // Printable chars without Ctrl/Alt → start input
+                key.keysym.is_printable() && !key.modifiers.control_key && !key.modifiers.alt_key
+            }
+            InputState::Composing { .. } => {
+                // Ctrl+key shortcuts
+                if key.modifiers.control_key {
+                    return matches!(
+                        key.keysym,
+                        Keysym::SPACE
+                            | Keysym::KEY_K
+                            | Keysym::KEY_K_UPPER
+                            | Keysym::KEY_A
+                            | Keysym::KEY_A_UPPER
+                            | Keysym::KEY_B
+                            | Keysym::KEY_B_UPPER
+                            | Keysym::KEY_E
+                            | Keysym::KEY_E_UPPER
+                            | Keysym::KEY_F
+                            | Keysym::KEY_F_UPPER
+                    );
+                }
+                // Navigation and control keys
+                matches!(
+                    key.keysym,
+                    Keysym::RETURN
+                        | Keysym::ESCAPE
+                        | Keysym::BACKSPACE
+                        | Keysym::DELETE
+                        | Keysym::MUHENKAN
+                        | Keysym::SPACE
+                        | Keysym::DOWN
+                        | Keysym::TAB
+                        | Keysym::HENKAN
+                        | Keysym::LEFT
+                        | Keysym::RIGHT
+                        | Keysym::HOME
+                        | Keysym::END
+                ) || (key.keysym.is_printable() && !key.modifiers.alt_key)
+            }
+            InputState::Conversion { .. } => {
+                // Navigation and commit keys
+                matches!(
+                    key.keysym,
+                    Keysym::RETURN
+                        | Keysym::ESCAPE
+                        | Keysym::SPACE
+                        | Keysym::DOWN
+                        | Keysym::TAB
+                        | Keysym::UP
+                        | Keysym::PAGE_DOWN
+                        | Keysym::PAGE_UP
+                        | Keysym::BACKSPACE
+                )
+                // Ctrl+N/P
+                || (key.modifiers.control_key && !key.modifiers.alt_key
+                    && matches!(key.keysym, Keysym::KEY_N | Keysym::KEY_N_UPPER | Keysym::KEY_P | Keysym::KEY_P_UPPER))
+                // Digit selection (1-9)
+                || key.keysym.digit_value().is_some()
+                // Printable char → commit + continue
+                || (key.keysym.is_printable() && !key.modifiers.control_key && !key.modifiers.alt_key)
+            }
+        }
+    }
+
     /// Process a key event
     pub fn process_key(&mut self, key: &KeyEvent) -> EngineResult {
         // Log modifier key events for debugging key mapping issues
