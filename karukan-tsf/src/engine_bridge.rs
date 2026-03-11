@@ -19,6 +19,9 @@ pub struct BridgeConfig {
 
 impl Default for BridgeConfig {
     fn default() -> Self {
+        // Ensure a default config file exists so users can discover and edit it
+        Settings::ensure_default_config();
+
         Self {
             settings: Settings::load().unwrap_or_default(),
         }

@@ -1,5 +1,9 @@
 # Karukan IME デフォルト設定
-# このファイルは ~/.config/karukan-im/config.toml にコピーして使用してください
+#
+# 設定ファイルの場所:
+#   Linux:   ~/.config/karukan-im/config.toml
+#   macOS:   ~/Library/Application Support/com.karukan.karukan-im/config.toml
+#   Windows: %APPDATA%\karukan\karukan-im\config\config.toml
 
 [conversion]
 # 変換ストラテジー: adaptive（動的切替）, light（軽量モデルのみ）, main（メインモデルのみ）

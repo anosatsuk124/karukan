@@ -135,6 +135,20 @@ pub fn register_server() -> windows::core::Result<()> {
             &GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
             &CLSID_KARUKAN_TEXT_SERVICE,
         )?;
+
+        // Required for Windows Store / UWP / modern app support
+        cat_mgr.RegisterCategory(
+            &CLSID_KARUKAN_TEXT_SERVICE,
+            &GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+            &CLSID_KARUKAN_TEXT_SERVICE,
+        )?;
+
+        // Required for system tray integration
+        cat_mgr.RegisterCategory(
+            &CLSID_KARUKAN_TEXT_SERVICE,
+            &GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+            &CLSID_KARUKAN_TEXT_SERVICE,
+        )?;
     }
 
     Ok(())
@@ -177,6 +191,16 @@ pub fn unregister_server() -> windows::core::Result<()> {
             let _ = cat_mgr.UnregisterCategory(
                 &CLSID_KARUKAN_TEXT_SERVICE,
                 &GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                &CLSID_KARUKAN_TEXT_SERVICE,
+            );
+            let _ = cat_mgr.UnregisterCategory(
+                &CLSID_KARUKAN_TEXT_SERVICE,
+                &GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+                &CLSID_KARUKAN_TEXT_SERVICE,
+            );
+            let _ = cat_mgr.UnregisterCategory(
+                &CLSID_KARUKAN_TEXT_SERVICE,
+                &GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
                 &CLSID_KARUKAN_TEXT_SERVICE,
             );
         }

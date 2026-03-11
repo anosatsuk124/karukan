@@ -56,6 +56,22 @@ pub const GUID_PRESERVED_KEY_CTRL_SPACE: GUID =
 pub const GUID_LANGBAR_ITEM_BUTTON: GUID =
     GUID::from_u128(0xFCD8_A6B7_9E2F_4062_CF4E_BA7D_AEBF_1C45);
 
+/// GUID for immersive (modern/UWP app) support capability.
+///
+/// Required for the IME to be loaded in Windows Store / UWP / modern apps.
+/// {13A016DF-560B-46CD-947A-4C3AF1E0E35D}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT: GUID =
+    GUID::from_u128(0x13A0_16DF_560B_46CD_947A_4C3A_F1E0_E35D);
+
+/// GUID for system tray support capability.
+///
+/// Required for proper system tray integration in modern Windows.
+/// {25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT: GUID =
+    GUID::from_u128(0x2550_4FB4_7BAB_4BC1_9C69_CF81_890F_0EF5);
+
 /// Japanese language ID (LANGID 0x0411 = Japanese)
 pub const LANGID_JAPANESE: u16 = 0x0411;
 
