@@ -9,7 +9,7 @@ use windows::core::*;
 
 use karukan_im::EngineAction;
 
-use crate::globals::GUID_PRESERVED_KEY_ONOFF;
+use crate::globals::{GUID_PRESERVED_KEY_CTRL_SPACE, GUID_PRESERVED_KEY_ONOFF};
 use crate::tsf::edit_session::ActionEditSession;
 use crate::tsf::lang_bar::KarukanLangBarButton;
 use crate::tsf::text_input_processor::KarukanTextService_Impl;
@@ -23,8 +23,8 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
 
     /// Called before OnKeyDown — determines if the key will be consumed.
     ///
-    /// We process the key through the engine here and cache the result.
-    /// If consumed, TSF will call OnKeyDown where we apply the cached actions.
+    /// Uses `would_consume_key` for side-effect-free filtering. The actual
+    /// engine state change happens in `OnKeyDown`.
     fn OnTestKeyDown(
         &self,
         _pic: Option<&ITfContext>,
@@ -36,8 +36,34 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
         if !inner.enabled {
             return Ok(FALSE);
         }
-        drop(inner);
 
+        let vk = wparam.0 as u32;
+        let (shift, control, alt, win) = get_modifier_state();
+        let unicode_char = vk_to_unicode(vk, shift);
+
+        let consumed =
+            inner
+                .engine
+                .would_consume_key(vk, unicode_char, shift, control, alt, win, true);
+
+        tracing::debug!(
+            "OnTestKeyDown: vk=0x{:02X} unicode={:?} shift={} ctrl={} alt={} → consumed={}",
+            vk,
+            unicode_char,
+            shift,
+            control,
+            alt,
+            consumed
+        );
+
+        Ok(BOOL::from(consumed))
+    }
+
+    /// Called when a key is pressed and OnTestKeyDown returned TRUE.
+    ///
+    /// Processes the key through the engine (state change happens here)
+    /// and applies actions via an EditSession.
+    fn OnKeyDown(&self, pic: Option<&ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let vk = wparam.0 as u32;
         let (shift, control, alt, win) = get_modifier_state();
         let unicode_char = vk_to_unicode(vk, shift);
@@ -47,41 +73,26 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
             .engine
             .process_key(vk, unicode_char, shift, control, alt, win, true);
 
-        let consumed = result.consumed;
-        inner.cached_result = Some(result);
+        tracing::debug!(
+            "OnKeyDown: vk=0x{:02X} → consumed={} actions={}",
+            vk,
+            result.consumed,
+            result.actions.len()
+        );
 
-        Ok(BOOL::from(consumed))
-    }
+        if result.consumed
+            && !result.actions.is_empty()
+            && let Some(context) = pic
+        {
+            drop(inner); // Release borrow before edit session
+            apply_engine_actions(self, context, &result.actions)?;
 
-    /// Called when a key is pressed and OnTestKeyDown returned TRUE.
-    ///
-    /// Applies the cached EngineResult actions via an EditSession.
-    fn OnKeyDown(
-        &self,
-        pic: Option<&ITfContext>,
-        _wparam: WPARAM,
-        _lparam: LPARAM,
-    ) -> Result<BOOL> {
-        let mut inner = self.inner.borrow_mut();
+            // Check for mode changes and update language bar
+            update_lang_bar_if_mode_changed(self);
 
-        if let Some(result) = inner.cached_result.take() {
-            if result.consumed
-                && !result.actions.is_empty()
-                && let Some(context) = pic
-            {
-                drop(inner); // Release borrow before edit session
-                apply_engine_actions(self, context, &result.actions)?;
-
-                // Check for mode changes and update language bar
-                update_lang_bar_if_mode_changed(self);
-
-                return Ok(TRUE);
-            }
-            Ok(BOOL::from(result.consumed))
-        } else {
-            // No cached result — should not happen, but handle gracefully
-            Ok(FALSE)
+            return Ok(TRUE);
         }
+        Ok(BOOL::from(result.consumed))
     }
 
     /// Called before OnKeyUp — we generally don't consume key-up events.
@@ -106,57 +117,41 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                 return Ok(FALSE);
             }
 
-            if *rguid == GUID_PRESERVED_KEY_ONOFF {
-                let mut inner = self.inner.borrow_mut();
-
-                // SKKモード: エンジンにキーイベントとして処理させる
-                if inner.engine.is_skk_mode() {
-                    let key = karukan_im::KeyEvent::press(karukan_im::Keysym::ZENKAKU_HANKAKU);
-                    let result = inner.engine.process_key_event(&key);
-                    if result.consumed
-                        && !result.actions.is_empty()
-                        && let Some(context) = pic
-                    {
-                        drop(inner);
-                        apply_engine_actions(self, context, &result.actions)?;
-                        update_lang_bar_if_mode_changed(self);
-                    }
-                    return Ok(TRUE);
-                }
-
-                inner.enabled = !inner.enabled;
-                if !inner.enabled {
-                    // Commit pending text and reset when turning IME off
-                    let _committed = inner.engine.commit();
-                    inner.engine.reset();
-                    inner.composition = None;
-                    // Hide candidate window
-                    if let Some(ref cw) = inner.candidate_window {
-                        cw.borrow_mut().hide();
-                    }
-                }
-
-                // Sync compartment state
-                if let Some(ref thread_mgr) = inner.thread_mgr {
-                    let _ = crate::tsf::compartment::set_openclose_state(
-                        thread_mgr,
-                        inner.client_id,
-                        inner.enabled,
-                    );
-                }
-
-                // Update language bar
-                if let Some(ref item) = inner.lang_bar_item {
-                    let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
-                    button.update_mode(inner.engine.input_mode(), inner.enabled);
-                }
-
-                tracing::debug!("IME toggle: enabled={}", inner.enabled);
-                Ok(TRUE)
-            } else {
-                Ok(FALSE)
+            if *rguid != GUID_PRESERVED_KEY_ONOFF && *rguid != GUID_PRESERVED_KEY_CTRL_SPACE {
+                return Ok(FALSE);
             }
         }
+
+        // Phase 1: Update state and extract values (short borrow)
+        let (thread_mgr, client_id, enabled) = {
+            let mut inner = self.inner.borrow_mut();
+            inner.enabled = !inner.enabled;
+            if !inner.enabled {
+                // Commit pending text and reset when turning IME off
+                let _committed = inner.engine.commit();
+                inner.engine.reset();
+                inner.composition = None;
+                // Hide candidate window
+                if let Some(ref cw) = inner.candidate_window {
+                    cw.borrow_mut().hide();
+                }
+            }
+            let tm = inner.thread_mgr.clone();
+            let cid = inner.client_id;
+            let en = inner.enabled;
+            (tm, cid, en)
+        }; // borrow_mut dropped — safe for TSF callbacks
+
+        // Phase 2: Sync compartment state (may trigger OnChange callback)
+        if let Some(ref thread_mgr) = thread_mgr {
+            let _ = crate::tsf::compartment::set_openclose_state(thread_mgr, client_id, enabled);
+        }
+
+        // Phase 3: Update language bar
+        update_lang_bar_if_mode_changed(self);
+
+        tracing::debug!("IME toggle: enabled={}", enabled);
+        Ok(TRUE)
     }
 }
 
@@ -248,9 +243,13 @@ fn apply_engine_actions(
     unsafe {
         let hr =
             context.RequestEditSession(client_id, &edit_session, TF_ES_SYNC | TF_ES_READWRITE)?;
-        // Check the edit session result
+        tracing::debug!("RequestEditSession result: {:?}", hr);
         if hr.is_err() {
-            tracing::warn!("Edit session failed: {:?}", hr);
+            // Sync|ReadWrite may be rejected in modern apps; try async as fallback
+            tracing::warn!(
+                "Edit session failed with TF_ES_SYNC|TF_ES_READWRITE: {:?}",
+                hr
+            );
         }
     }
 

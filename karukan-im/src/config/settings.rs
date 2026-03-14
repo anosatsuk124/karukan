@@ -174,13 +174,43 @@ impl Settings {
         };
 
         if !config_file.exists() {
-            debug!("Config file not found, using defaults");
+            debug!("Config file not found at {:?}, using defaults", config_file);
             return Ok(Self::default());
         }
 
         debug!("Loading config from {:?}", config_file);
         let content = fs::read_to_string(&config_file)?;
         parse_with_defaults(&content)
+    }
+
+    /// Ensure a default config file exists so users can discover and edit it.
+    ///
+    /// If the config file doesn't exist, creates the config directory and
+    /// writes the embedded default configuration. Returns the config file path.
+    pub fn ensure_default_config() -> Option<PathBuf> {
+        let config_file = Self::config_file()?;
+
+        if config_file.exists() {
+            return Some(config_file);
+        }
+
+        if let Some(parent) = config_file.parent()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            warn!("Failed to create config directory {:?}: {}", parent, e);
+            return Some(config_file);
+        }
+
+        match fs::write(&config_file, DEFAULT_CONFIG_TOML) {
+            Ok(()) => {
+                debug!("Created default config at {:?}", config_file);
+            }
+            Err(e) => {
+                warn!("Failed to write default config to {:?}: {}", config_file, e);
+            }
+        }
+
+        Some(config_file)
     }
 
     /// Load settings from a specific file, merged on top of defaults.

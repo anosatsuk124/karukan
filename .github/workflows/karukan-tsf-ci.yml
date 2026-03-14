@@ -94,3 +94,16 @@ jobs:
           workspaces: ". -> target"
       - name: Build release
         run: cargo build -p karukan-tsf --release
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
+      - name: Build NSIS installer
+        run: |
+          copy target\release\karukan_tsf.dll karukan-tsf\installer\
+          makensis /DVERSION=dev karukan-tsf\installer\karukan-installer.nsi
+        shell: cmd
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Karukan-windows-x86_64
+          path: karukan-tsf/installer/Karukan-Setup-*.exe
+          retention-days: 14

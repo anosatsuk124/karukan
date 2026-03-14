@@ -135,7 +135,38 @@ pub fn register_server() -> windows::core::Result<()> {
             &GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
             &CLSID_KARUKAN_TEXT_SERVICE,
         )?;
+
+        // Required for Windows Store / UWP / modern app support
+        cat_mgr.RegisterCategory(
+            &CLSID_KARUKAN_TEXT_SERVICE,
+            &GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+            &CLSID_KARUKAN_TEXT_SERVICE,
+        )?;
+
+        // Required for system tray integration
+        cat_mgr.RegisterCategory(
+            &CLSID_KARUKAN_TEXT_SERVICE,
+            &GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+            &CLSID_KARUKAN_TEXT_SERVICE,
+        )?;
+
+        // Required for key event delivery in modern/UWP apps (Windows 8+)
+        cat_mgr.RegisterCategory(
+            &CLSID_KARUKAN_TEXT_SERVICE,
+            &GUID_TFCAT_TIPCAP_SECUREMODE,
+            &CLSID_KARUKAN_TEXT_SERVICE,
+        )?;
+
+        // Required for proper UI element handling in modern apps
+        cat_mgr.RegisterCategory(
+            &CLSID_KARUKAN_TEXT_SERVICE,
+            &GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+            &CLSID_KARUKAN_TEXT_SERVICE,
+        )?;
     }
+
+    // Set AppContainer ACL so modern/UWP apps can load the DLL
+    set_appcontainer_acl(&dll_path);
 
     Ok(())
 }
@@ -179,6 +210,26 @@ pub fn unregister_server() -> windows::core::Result<()> {
                 &GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
                 &CLSID_KARUKAN_TEXT_SERVICE,
             );
+            let _ = cat_mgr.UnregisterCategory(
+                &CLSID_KARUKAN_TEXT_SERVICE,
+                &GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+                &CLSID_KARUKAN_TEXT_SERVICE,
+            );
+            let _ = cat_mgr.UnregisterCategory(
+                &CLSID_KARUKAN_TEXT_SERVICE,
+                &GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+                &CLSID_KARUKAN_TEXT_SERVICE,
+            );
+            let _ = cat_mgr.UnregisterCategory(
+                &CLSID_KARUKAN_TEXT_SERVICE,
+                &GUID_TFCAT_TIPCAP_SECUREMODE,
+                &CLSID_KARUKAN_TEXT_SERVICE,
+            );
+            let _ = cat_mgr.UnregisterCategory(
+                &CLSID_KARUKAN_TEXT_SERVICE,
+                &GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+                &CLSID_KARUKAN_TEXT_SERVICE,
+            );
         }
     }
 
@@ -203,6 +254,29 @@ fn get_dll_path() -> windows::core::Result<String> {
     let mut buf = [0u16; 260];
     let len = unsafe { GetModuleFileNameW(hmodule, &mut buf) } as usize;
     Ok(String::from_utf16_lossy(&buf[..len]))
+}
+
+/// Set AppContainer ACL on the DLL so modern/UWP apps can load it.
+///
+/// Grants read+execute to ALL APPLICATION PACKAGES (S-1-15-2-1).
+#[cfg(target_os = "windows")]
+fn set_appcontainer_acl(dll_path: &str) {
+    match std::process::Command::new("icacls")
+        .arg(dll_path)
+        .arg("/grant")
+        .arg("*S-1-15-2-1:(RX)")
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            tracing::debug!("AppContainer ACL set on {}", dll_path);
+        }
+        Ok(output) => {
+            tracing::warn!("icacls failed: {}", String::from_utf8_lossy(&output.stderr));
+        }
+        Err(e) => {
+            tracing::warn!("Failed to run icacls: {}", e);
+        }
+    }
 }
 
 // Stubs for non-Windows platforms (allow compilation and testing on Linux)

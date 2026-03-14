@@ -4,6 +4,7 @@
 //! language indicator area.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
@@ -31,7 +32,7 @@ struct LangBarInner {
     sink: Option<ITfLangBarItemSink>,
     sink_cookie: u32,
     next_cookie: u32,
-    toggle_callback: Option<Box<dyn Fn()>>,
+    toggle_callback: Option<Rc<dyn Fn()>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -50,7 +51,7 @@ impl KarukanLangBarButton {
     }
 
     /// Set a callback to be invoked when the language bar button is clicked.
-    pub fn set_toggle_callback(&self, callback: Box<dyn Fn()>) {
+    pub fn set_toggle_callback(&self, callback: Rc<dyn Fn()>) {
         self.inner.borrow_mut().toggle_callback = Some(callback);
     }
 
@@ -138,8 +139,14 @@ impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
 // ITfLangBarItemButton implementation
 impl ITfLangBarItemButton_Impl for KarukanLangBarButton_Impl {
     fn OnClick(&self, _click: TfLBIClick, _pt: &POINT, _prcarea: *const RECT) -> Result<()> {
-        let inner = self.inner.borrow();
-        if let Some(ref callback) = inner.toggle_callback {
+        // Clone the callback Rc outside the borrow, then invoke it.
+        // This prevents reentrant borrow panics when the callback triggers
+        // OnChange → update_mode → inner.borrow_mut().
+        let callback = {
+            let inner = self.inner.borrow();
+            inner.toggle_callback.clone()
+        };
+        if let Some(callback) = callback {
             callback();
         }
         Ok(())

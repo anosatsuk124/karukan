@@ -13,11 +13,34 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::*;
 
 #[cfg(target_os = "windows")]
-const CANDIDATE_ITEM_HEIGHT: i32 = 24;
+const BASE_CANDIDATE_ITEM_HEIGHT: i32 = 24;
 #[cfg(target_os = "windows")]
-const CANDIDATE_PADDING: i32 = 4;
+const BASE_CANDIDATE_PADDING: i32 = 4;
+#[cfg(target_os = "windows")]
+const BASE_CHAR_WIDTH: i32 = 14;
+#[cfg(target_os = "windows")]
+const BASE_LABEL_WIDTH: i32 = 28;
+#[cfg(target_os = "windows")]
+const BASE_MIN_WIDTH: i32 = 120;
+#[cfg(target_os = "windows")]
+const BASE_FONT_SIZE: i32 = 16;
 #[cfg(target_os = "windows")]
 const WINDOW_CLASS_NAME: PCWSTR = w!("KarukanCandidateWindow");
+
+/// Get the DPI scale factor for the given window.
+/// Returns 1.0 for 96 DPI (100%), 1.25 for 120 DPI (125%), etc.
+#[cfg(target_os = "windows")]
+fn dpi_scale(hwnd: HWND) -> f64 {
+    use windows::Win32::UI::HiDpi::GetDpiForWindow;
+    let dpi = unsafe { GetDpiForWindow(hwnd) };
+    if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 }
+}
+
+/// Scale a pixel value by the DPI scale factor.
+#[cfg(target_os = "windows")]
+fn scale(value: i32, s: f64) -> i32 {
+    (value as f64 * s).round() as i32
+}
 
 /// Render data shared between the candidate window and the WNDPROC.
 #[cfg(target_os = "windows")]
@@ -68,9 +91,13 @@ impl CandidateWindow {
             }
         }
 
+        let s = dpi_scale(self.hwnd);
+        let item_height = scale(BASE_CANDIDATE_ITEM_HEIGHT, s);
+        let padding = scale(BASE_CANDIDATE_PADDING, s);
+
         let count = candidates.len().max(1) as i32;
-        let height = count * CANDIDATE_ITEM_HEIGHT + CANDIDATE_PADDING * 2;
-        let width = self.calculate_width(candidates);
+        let height = count * item_height + padding * 2;
+        let width = self.calculate_width(candidates, s);
 
         unsafe {
             let _ = SetWindowPos(
@@ -145,15 +172,16 @@ impl CandidateWindow {
         }
     }
 
-    fn calculate_width(&self, candidates: &[String]) -> i32 {
+    fn calculate_width(&self, candidates: &[String], s: f64) -> i32 {
         let max_chars = candidates
             .iter()
             .map(|c| c.chars().count())
             .max()
             .unwrap_or(4);
-        // ~14px per CJK character + label width + padding
-        let label_width = 28; // "9. "
-        (max_chars as i32 * 14 + label_width + CANDIDATE_PADDING * 2).max(120)
+        let char_width = scale(BASE_CHAR_WIDTH, s);
+        let label_width = scale(BASE_LABEL_WIDTH, s);
+        let padding = scale(BASE_CANDIDATE_PADDING, s);
+        (max_chars as i32 * char_width + label_width + padding * 2).max(scale(BASE_MIN_WIDTH, s))
     }
 }
 
@@ -183,7 +211,16 @@ fn register_window_class() {
 #[cfg(target_os = "windows")]
 fn create_candidate_window() -> HWND {
     unsafe {
-        CreateWindowExW(
+        use windows::Win32::UI::HiDpi::{
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
+        };
+
+        // Temporarily set per-monitor DPI awareness for this window creation.
+        // This ensures GetDpiForWindow returns correct per-monitor DPI values
+        // even if the host application is DPI-unaware.
+        let prev_context = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+        let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             WINDOW_CLASS_NAME,
             w!(""),
@@ -197,7 +234,14 @@ fn create_candidate_window() -> HWND {
             None,
             None,
         )
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+        // Restore previous DPI awareness context
+        if !prev_context.is_invalid() {
+            SetThreadDpiAwarenessContext(prev_context);
+        }
+
+        hwnd
     }
 }
 
@@ -213,6 +257,24 @@ unsafe extern "system" fn candidate_wnd_proc(
             unsafe { paint_candidates(hwnd) };
             LRESULT(0)
         }
+        WM_DPICHANGED => {
+            // When the window moves to a monitor with different DPI,
+            // resize to the system-suggested rect and repaint.
+            unsafe {
+                let suggested_rect = &*(lparam.0 as *const RECT);
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    suggested_rect.left,
+                    suggested_rect.top,
+                    suggested_rect.right - suggested_rect.left,
+                    suggested_rect.bottom - suggested_rect.top,
+                    SWP_NOACTIVATE | SWP_NOZORDER,
+                );
+                let _ = InvalidateRect(hwnd, None, true);
+            }
+            LRESULT(0)
+        }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
 }
@@ -220,6 +282,12 @@ unsafe extern "system" fn candidate_wnd_proc(
 #[cfg(target_os = "windows")]
 unsafe fn paint_candidates(hwnd: HWND) {
     unsafe {
+        let s = dpi_scale(hwnd);
+        let item_height = scale(BASE_CANDIDATE_ITEM_HEIGHT, s);
+        let padding = scale(BASE_CANDIDATE_PADDING, s);
+        let text_y_offset = scale(3, s);
+        let font_size = scale(BASE_FONT_SIZE, s);
+
         let mut ps = PAINTSTRUCT::default();
         let hdc = BeginPaint(hwnd, &mut ps);
 
@@ -228,18 +296,37 @@ unsafe fn paint_candidates(hwnd: HWND) {
             let data = &*ptr;
             let _ = SetBkMode(hdc, TRANSPARENT);
 
+            // Create a DPI-scaled font for clear rendering
+            let font = CreateFontW(
+                -font_size,
+                0,
+                0,
+                0,
+                FW_NORMAL.0 as i32,
+                0,
+                0,
+                0,
+                DEFAULT_CHARSET.0 as u32,
+                OUT_DEFAULT_PRECIS.0 as u32,
+                CLIP_DEFAULT_PRECIS.0 as u32,
+                CLEARTYPE_QUALITY.0 as u32,
+                (FF_DONTCARE.0 | FIXED_PITCH.0) as u32,
+                w!("Meiryo UI"),
+            );
+            let old_font = SelectObject(hdc, font);
+
             // Highlight color for selected item
             let highlight_brush = CreateSolidBrush(COLORREF(0x00D77800));
 
             for (i, candidate) in data.candidates.iter().enumerate() {
-                let y = CANDIDATE_PADDING + i as i32 * CANDIDATE_ITEM_HEIGHT;
+                let y = padding + i as i32 * item_height;
 
                 if i == data.selected {
                     let rect = RECT {
                         left: 0,
                         top: y,
                         right: ps.rcPaint.right,
-                        bottom: y + CANDIDATE_ITEM_HEIGHT,
+                        bottom: y + item_height,
                     };
                     FillRect(hdc, &rect, highlight_brush);
                     SetTextColor(hdc, COLORREF(0x00FFFFFF));
@@ -250,10 +337,12 @@ unsafe fn paint_candidates(hwnd: HWND) {
                 // Draw "N. candidate" label
                 let label = format!("{}. {}", i + 1, candidate);
                 let label_wide: Vec<u16> = label.encode_utf16().collect();
-                let _ = TextOutW(hdc, CANDIDATE_PADDING, y + 3, &label_wide);
+                let _ = TextOutW(hdc, padding, y + text_y_offset, &label_wide);
             }
 
             let _ = DeleteObject(highlight_brush);
+            SelectObject(hdc, old_font);
+            let _ = DeleteObject(font);
         }
 
         let _ = EndPaint(hwnd, &ps);

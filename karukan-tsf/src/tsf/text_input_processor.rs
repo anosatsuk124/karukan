@@ -10,8 +10,8 @@ use windows::core::*;
 use crate::candidate::window::CandidateWindow;
 use crate::engine_bridge::EngineBridge;
 use crate::globals::{
-    GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT, GUID_PRESERVED_KEY_ONOFF,
-    dll_add_ref, dll_release,
+    GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT, GUID_PRESERVED_KEY_CTRL_SPACE,
+    GUID_PRESERVED_KEY_ONOFF, dll_add_ref, dll_release,
 };
 use crate::tsf::compartment;
 use crate::tsf::lang_bar::KarukanLangBarButton;
@@ -44,8 +44,8 @@ pub(crate) struct KarukanTextServiceInner {
     pub(crate) keystroke_mgr_cookie: bool,
     /// Cookie for ITfCompartmentEventSink on GUID_COMPARTMENT_KEYBOARD_OPENCLOSE
     pub(crate) compartment_sink_cookie: u32,
-    /// Cached EngineResult from OnTestKeyDown for reuse in OnKeyDown
-    pub(crate) cached_result: Option<karukan_im::EngineResult>,
+    /// Flags passed to ActivateEx (e.g. TF_TMAE_UIELEMENTENABLEDONLY)
+    pub(crate) activate_flags: u32,
     /// Whether the IME is enabled (toggled via PreservedKey)
     pub(crate) enabled: bool,
     /// Candidate window for displaying conversion candidates
@@ -73,7 +73,7 @@ impl KarukanTextService {
                 thread_mgr_sink_cookie: TF_INVALID_COOKIE,
                 keystroke_mgr_cookie: false,
                 compartment_sink_cookie: TF_INVALID_COOKIE,
-                cached_result: None,
+                activate_flags: 0,
                 enabled: true,
                 candidate_window: None,
                 lang_bar_item: None,
@@ -124,6 +124,13 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
                             uModifiers: 0,
                         };
                         let _ = km.UnpreserveKey(&GUID_PRESERVED_KEY_ONOFF, &pk);
+
+                        // Unpreserve Ctrl+Space key
+                        let pk_ctrl_space = TF_PRESERVEDKEY {
+                            uVKey: 0x20,        // VK_SPACE
+                            uModifiers: 0x0004, // TF_MOD_CONTROL
+                        };
+                        let _ = km.UnpreserveKey(&GUID_PRESERVED_KEY_CTRL_SPACE, &pk_ctrl_space);
                     }
                 }
             }
@@ -186,45 +193,63 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
 
 // ITfTextInputProcessorEx implementation
 impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
-    fn ActivateEx(&self, ptim: Option<&ITfThreadMgr>, tid: u32, _dwflags: u32) -> Result<()> {
-        let mut inner = self.inner.borrow_mut();
-
+    fn ActivateEx(&self, ptim: Option<&ITfThreadMgr>, tid: u32, dwflags: u32) -> Result<()> {
         let thread_mgr = ptim.ok_or(E_INVALIDARG)?;
-        inner.thread_mgr = Some(thread_mgr.clone());
-        inner.client_id = tid;
 
-        // Initialize the engine (loads models, dictionaries, learning cache)
-        if let Err(e) = inner.engine.initialize() {
-            tracing::error!("Failed to initialize engine: {}", e);
-            // Continue anyway — engine works without models (romaji-only mode)
-        }
+        tracing::debug!("ActivateEx: tid={} dwflags=0x{:08X}", tid, dwflags);
 
-        // Register display attribute atoms via ITfCategoryMgr
-        unsafe {
-            if let Ok(cat_mgr) = windows::Win32::System::Com::CoCreateInstance::<_, ITfCategoryMgr>(
-                &CLSID_TF_CategoryMgr,
-                None,
-                windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
-            ) {
-                if let Ok(atom_input) = cat_mgr.RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_INPUT) {
-                    inner.display_attr_atom_input = atom_input;
-                }
-                if let Ok(atom_converted) = cat_mgr.RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_CONVERTED)
+        // Phase 1: Initialize engine and basic state (short borrow, no TSF callbacks)
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.thread_mgr = Some(thread_mgr.clone());
+            inner.client_id = tid;
+            inner.activate_flags = dwflags;
+
+            // Initialize the engine (loads models, dictionaries, learning cache)
+            if let Err(e) = inner.engine.initialize() {
+                tracing::error!("Failed to initialize engine: {}", e);
+                // Continue anyway — engine works without models (romaji-only mode)
+            }
+
+            // Register display attribute atoms via ITfCategoryMgr
+            unsafe {
+                if let Ok(cat_mgr) =
+                    windows::Win32::System::Com::CoCreateInstance::<_, ITfCategoryMgr>(
+                        &CLSID_TF_CategoryMgr,
+                        None,
+                        windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
+                    )
                 {
-                    inner.display_attr_atom_converted = atom_converted;
+                    if let Ok(atom_input) = cat_mgr.RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_INPUT) {
+                        inner.display_attr_atom_input = atom_input;
+                    }
+                    if let Ok(atom_converted) =
+                        cat_mgr.RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_CONVERTED)
+                    {
+                        inner.display_attr_atom_converted = atom_converted;
+                    }
+                    tracing::debug!(
+                        "Display attribute atoms: input={}, converted={}",
+                        inner.display_attr_atom_input,
+                        inner.display_attr_atom_converted
+                    );
                 }
+            }
+
+            // Create candidate window (skip in UI-element-enabled-only mode)
+            const TF_TMAE_UIELEMENTENABLEDONLY: u32 = 0x4;
+            if dwflags & TF_TMAE_UIELEMENTENABLEDONLY == 0 {
+                inner.candidate_window = Some(Rc::new(RefCell::new(CandidateWindow::new())));
+            } else {
                 tracing::debug!(
-                    "Display attribute atoms: input={}, converted={}",
-                    inner.display_attr_atom_input,
-                    inner.display_attr_atom_converted
+                    "ActivateEx: TF_TMAE_UIELEMENTENABLEDONLY set, skipping candidate window"
                 );
             }
-        }
+            inner.enabled = true;
+        } // borrow_mut dropped here — TSF callbacks are now safe
 
-        // Create candidate window
-        inner.candidate_window = Some(Rc::new(RefCell::new(CandidateWindow::new())));
-
-        // Advise key event sink
+        // Phase 2: Advise sinks (may trigger TSF callbacks like OnSetFocus)
+        // inner is NOT borrowed here, so reentrant callbacks won't panic
         unsafe {
             let keystroke_mgr: ITfKeystrokeMgr = thread_mgr.cast()?;
             let this_sink: ITfKeyEventSink = self.cast()?;
@@ -238,16 +263,29 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
             let desc: Vec<u16> = "karukan IME toggle".encode_utf16().collect();
             let _ = keystroke_mgr.PreserveKey(tid, &GUID_PRESERVED_KEY_ONOFF, &pk, &desc);
 
-            inner.keystroke_mgr_cookie = true;
+            // Register preserved key: Ctrl+Space for IME toggle
+            // (alternative for keyboards without Hankaku/Zenkaku key)
+            let pk_ctrl_space = TF_PRESERVEDKEY {
+                uVKey: 0x20,        // VK_SPACE
+                uModifiers: 0x0004, // TF_MOD_CONTROL
+            };
+            let desc_cs: Vec<u16> = "karukan IME toggle".encode_utf16().collect();
+            let _ = keystroke_mgr.PreserveKey(
+                tid,
+                &GUID_PRESERVED_KEY_CTRL_SPACE,
+                &pk_ctrl_space,
+                &desc_cs,
+            );
         }
+        self.inner.borrow_mut().keystroke_mgr_cookie = true;
 
         // Advise thread manager event sink
-        unsafe {
+        let thread_mgr_sink_cookie = unsafe {
             let source: ITfSource = thread_mgr.cast()?;
             let this_sink: ITfThreadMgrEventSink = self.cast()?;
-            let cookie = source.AdviseSink(&ITfThreadMgrEventSink::IID, &this_sink)?;
-            inner.thread_mgr_sink_cookie = cookie;
-        }
+            source.AdviseSink(&ITfThreadMgrEventSink::IID, &this_sink)?
+        };
+        self.inner.borrow_mut().thread_mgr_sink_cookie = thread_mgr_sink_cookie;
 
         // Add language bar button
         unsafe {
@@ -258,7 +296,7 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
                 // Set toggle callback: clicking the button toggles IME open/close
                 let toggle_thread_mgr = thread_mgr.clone();
                 let toggle_client_id = tid;
-                button.set_toggle_callback(Box::new(move || {
+                button.set_toggle_callback(Rc::new(move || {
                     if let Ok(open) =
                         compartment::get_openclose_state(&toggle_thread_mgr, toggle_client_id)
                     {
@@ -272,28 +310,27 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
 
                 let item: ITfLangBarItemButton = button.into();
                 if mgr.AddItem(&item).is_ok() {
-                    inner.lang_bar_item = Some(item);
+                    self.inner.borrow_mut().lang_bar_item = Some(item);
                     tracing::debug!("Language bar item added");
                 }
             }
         }
 
-        // Advise compartment event sink for keyboard open/close
+        // Phase 3: Advise compartment sink and set initial state
+        // set_openclose_state triggers OnChange synchronously, so inner must NOT be borrowed
         unsafe {
             let this_sink: ITfCompartmentEventSink = self.cast()?;
-            match compartment::advise_keyboard_openclose(thread_mgr, inner.client_id, &this_sink) {
+            match compartment::advise_keyboard_openclose(thread_mgr, tid, &this_sink) {
                 Ok(cookie) => {
-                    inner.compartment_sink_cookie = cookie;
-                    // Set initial open state
-                    let _ = compartment::set_openclose_state(thread_mgr, inner.client_id, true);
+                    self.inner.borrow_mut().compartment_sink_cookie = cookie;
+                    // Set initial open state — may trigger OnChange callback
+                    let _ = compartment::set_openclose_state(thread_mgr, tid, true);
                 }
                 Err(e) => {
                     tracing::warn!("Failed to advise compartment sink: {:?}", e);
                 }
             }
         }
-
-        inner.enabled = true;
 
         Ok(())
     }
@@ -312,7 +349,14 @@ impl ITfCompartmentEventSink_Impl for KarukanTextService_Impl {
             }
         }
 
-        let mut inner = self.inner.borrow_mut();
+        let mut inner = match self.inner.try_borrow_mut() {
+            Ok(inner) => inner,
+            Err(_) => {
+                // Reentrant call (e.g., from set_openclose_state inside ActivateEx)
+                tracing::debug!("OnChange: reentrant borrow, skipping");
+                return Ok(());
+            }
+        };
         if let Some(ref thread_mgr) = inner.thread_mgr {
             match compartment::get_openclose_state(thread_mgr, inner.client_id) {
                 Ok(open) => {

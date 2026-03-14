@@ -15,7 +15,15 @@ impl ITfCompositionSink_Impl for KarukanTextService_Impl {
         _ecwrite: u32,
         _pcomposition: Option<&ITfComposition>,
     ) -> Result<()> {
-        let mut inner = self.inner.borrow_mut();
+        let mut inner = match self.inner.try_borrow_mut() {
+            Ok(inner) => inner,
+            Err(_) => {
+                // Reentrant call (e.g., from EndComposition inside an edit session).
+                // The caller is already managing composition lifecycle.
+                tracing::debug!("OnCompositionTerminated: reentrant borrow, skipping");
+                return Ok(());
+            }
+        };
 
         // The composition was terminated externally — commit any pending text
         let committed = inner.engine.commit();

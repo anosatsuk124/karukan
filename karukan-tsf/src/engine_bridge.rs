@@ -19,6 +19,9 @@ pub struct BridgeConfig {
 
 impl Default for BridgeConfig {
     fn default() -> Self {
+        // Ensure a default config file exists so users can discover and edit it
+        Settings::ensure_default_config();
+
         Self {
             settings: Settings::load().unwrap_or_default(),
         }
@@ -128,6 +131,25 @@ impl EngineBridge {
         let key_event =
             keymap::create_key_event(vk, unicode_char, shift, control, alt, win, is_press);
         self.engine.process_key(&key_event)
+    }
+
+    /// Determine whether a key would be consumed without changing engine state.
+    ///
+    /// Used by TSF's `OnTestKeyDown` for side-effect-free key filtering.
+    #[allow(clippy::too_many_arguments)]
+    pub fn would_consume_key(
+        &self,
+        vk: u32,
+        unicode_char: Option<char>,
+        shift: bool,
+        control: bool,
+        alt: bool,
+        win: bool,
+        is_press: bool,
+    ) -> bool {
+        let key_event =
+            keymap::create_key_event(vk, unicode_char, shift, control, alt, win, is_press);
+        self.engine.would_consume_key(&key_event)
     }
 
     /// Process a pre-built KeyEvent through the engine.

@@ -41,12 +41,53 @@ pub const GUID_DISPLAY_ATTRIBUTE_CONVERTED: GUID =
 pub const GUID_PRESERVED_KEY_ONOFF: GUID =
     GUID::from_u128(0xEBC7_F5A6_8D1E_4F51_BE3D_AF6C_9DAE_0B34);
 
+/// GUID for the Ctrl+Space preserved key (IME toggle alternative).
+///
+/// For keyboards without Hankaku/Zenkaku key.
+/// Generated UUID: {C3D4E5F6-7A8B-4C9D-AE1F-2B3C4D5E6F70}
+#[cfg(target_os = "windows")]
+pub const GUID_PRESERVED_KEY_CTRL_SPACE: GUID =
+    GUID::from_u128(0xC3D4_E5F6_7A8B_4C9D_AE1F_2B3C_4D5E_6F70);
+
 /// GUID for the Language Bar button item.
 ///
 /// Generated UUID: {FCD8A6B7-9E2F-4062-CF4E-BA7DAEBF1C45}
 #[cfg(target_os = "windows")]
 pub const GUID_LANGBAR_ITEM_BUTTON: GUID =
     GUID::from_u128(0xFCD8_A6B7_9E2F_4062_CF4E_BA7D_AEBF_1C45);
+
+/// GUID for immersive (modern/UWP app) support capability.
+///
+/// Required for the IME to be loaded in Windows Store / UWP / modern apps.
+/// {13A016DF-560B-46CD-947A-4C3AF1E0E35D}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT: GUID =
+    GUID::from_u128(0x13A0_16DF_560B_46CD_947A_4C3A_F1E0_E35D);
+
+/// GUID for system tray support capability.
+///
+/// Required for proper system tray integration in modern Windows.
+/// {25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT: GUID =
+    GUID::from_u128(0x2550_4FB4_7BAB_4BC1_9C69_CF81_890F_0EF5);
+
+/// GUID for secure mode capability.
+///
+/// Required for IME to receive key events in modern/UWP apps on Windows 8+.
+/// Without this, the IME appears in the language bar but keys are not dispatched.
+/// {49D2F9CE-1F5E-11D7-A6D3-00065B84435C}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_SECUREMODE: GUID =
+    GUID::from_u128(0x49D2_F9CE_1F5E_11D7_A6D3_0006_5B84_435C);
+
+/// GUID for UI element enabled capability.
+///
+/// Required for proper UI element handling in modern apps.
+/// {49D2F9CF-1F5E-11D7-A6D3-00065B84435C}
+#[cfg(target_os = "windows")]
+pub const GUID_TFCAT_TIPCAP_UIELEMENTENABLED: GUID =
+    GUID::from_u128(0x49D2_F9CF_1F5E_11D7_A6D3_0006_5B84_435C);
 
 /// Japanese language ID (LANGID 0x0411 = Japanese)
 pub const LANGID_JAPANESE: u16 = 0x0411;
@@ -78,6 +119,15 @@ pub fn dll_add_ref() {
 /// Decrement the global DLL reference count.
 #[cfg(target_os = "windows")]
 pub fn dll_release() {
+    // Guard against underflow: if count is already 0, do not subtract.
+    // AtomicUsize underflow wraps to usize::MAX, which would prevent DLL unload forever.
+    let prev = DLL_REF_COUNT.load(std::sync::atomic::Ordering::SeqCst);
+    if prev == 0 {
+        tracing::error!(
+            "DLL reference count underflow detected — release without matching add_ref"
+        );
+        return;
+    }
     DLL_REF_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
 }
 

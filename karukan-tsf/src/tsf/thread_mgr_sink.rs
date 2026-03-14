@@ -22,11 +22,17 @@ impl ITfThreadMgrEventSink_Impl for KarukanTextService_Impl {
         pdimfocus: Option<&ITfDocumentMgr>,
         _pdimprevfocus: Option<&ITfDocumentMgr>,
     ) -> Result<()> {
-        let mut inner = self.inner.borrow_mut();
+        let mut inner = match self.inner.try_borrow_mut() {
+            Ok(inner) => inner,
+            Err(_) => {
+                // Reentrant call (e.g., triggered during ActivateEx's AdviseSink)
+                tracing::debug!("OnSetFocus: reentrant borrow, skipping");
+                return Ok(());
+            }
+        };
 
         // Reset engine state when focus changes to avoid stale state
         inner.engine.reset();
-        inner.cached_result = None;
         inner.composition = None;
 
         // Hide candidate window
