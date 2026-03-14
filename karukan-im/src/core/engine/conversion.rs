@@ -508,7 +508,7 @@ impl InputMethodEngine {
     }
 
     /// Get selected text and reading from conversion state, or None if not in conversion
-    fn selected_conversion_info(&self) -> Option<(String, Option<String>)> {
+    pub(super) fn selected_conversion_info(&self) -> Option<(String, Option<String>)> {
         match &self.state {
             InputState::Conversion { candidates, .. } => {
                 let text = candidates.selected_text().unwrap_or("").to_string();

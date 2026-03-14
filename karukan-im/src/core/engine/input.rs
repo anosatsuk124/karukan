@@ -358,7 +358,9 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             self.input_buf.clear();
             self.live.text.clear();
-            return EngineResult::consumed().with_action(EngineAction::HideAuxText);
+            return EngineResult::consumed()
+                .with_action(EngineAction::HideCandidates)
+                .with_action(EngineAction::HideAuxText);
         }
 
         // Record live conversion result in learning cache
@@ -371,6 +373,7 @@ impl InputMethodEngine {
 
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+            .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::Commit(text))
             .with_action(EngineAction::HideAuxText)
     }

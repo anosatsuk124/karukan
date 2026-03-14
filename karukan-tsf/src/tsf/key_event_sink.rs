@@ -100,7 +100,7 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
     }
 
     /// Called for preserved keys (e.g., Hankaku/Zenkaku toggle).
-    fn OnPreservedKey(&self, _pic: Option<&ITfContext>, rguid: *const GUID) -> Result<BOOL> {
+    fn OnPreservedKey(&self, pic: Option<&ITfContext>, rguid: *const GUID) -> Result<BOOL> {
         unsafe {
             if rguid.is_null() {
                 return Ok(FALSE);
@@ -108,6 +108,22 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
 
             if *rguid == GUID_PRESERVED_KEY_ONOFF {
                 let mut inner = self.inner.borrow_mut();
+
+                // SKKモード: エンジンにキーイベントとして処理させる
+                if inner.engine.is_skk_mode() {
+                    let key = karukan_im::KeyEvent::press(karukan_im::Keysym::ZENKAKU_HANKAKU);
+                    let result = inner.engine.process_key_event(&key);
+                    if result.consumed
+                        && !result.actions.is_empty()
+                        && let Some(context) = pic
+                    {
+                        drop(inner);
+                        apply_engine_actions(self, context, &result.actions)?;
+                        update_lang_bar_if_mode_changed(self);
+                    }
+                    return Ok(TRUE);
+                }
+
                 inner.enabled = !inner.enabled;
                 if !inner.enabled {
                     // Commit pending text and reset when turning IME off
