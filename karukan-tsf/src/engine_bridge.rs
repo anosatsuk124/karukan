@@ -177,6 +177,11 @@ impl EngineBridge {
         self.engine.set_surrounding_context(left, right);
     }
 
+    /// Check if the engine is using SKK keybinding profile.
+    pub fn is_skk_mode(&self) -> bool {
+        self.settings.keybinding.profile == karukan_im::config::settings::KeybindingProfile::Skk
+    }
+
     /// Get the current input mode.
     pub fn input_mode(&self) -> karukan_im::InputMode {
         self.engine.input_mode()

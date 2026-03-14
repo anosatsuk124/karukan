@@ -23,6 +23,12 @@
 | [karukan-engine](karukan-engine/) | コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換 |
 | [karukan-cli](karukan-cli/) | CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー |
 
+## フォークについて
+
+このプロジェクトは [togatoga/karukan](https://github.com/togatoga/karukan) のフォークです。SKKモードの追加、Windows (TSF) およびmacOS (IMKit) への対応を行っています。
+
+オリジナルの karukan を開発された [@togatoga](https://github.com/togatoga) さんに深く感謝いたします。
+
 ## 特徴
 
 - **ニューラルかな漢字変換**: GPT-2ベースのモデルをllama.cppで推論し、高度な日本語変換
@@ -37,6 +43,10 @@
 - **Linux (fcitx5)**: [karukan-im の README](karukan-im/README.md#install) を参照
 - **Windows (TSF)**: [karukan-tsf の README](karukan-tsf/README.md#build) を参照
 - **macOS (IMKit)**: [karukan-macos の README](karukan-macos/README.md) を参照
+
+## 既知の問題
+
+- **macOS: WezTerm で SKK モードの Ctrl+J が効かない** — [karukan-macos の回避策](karukan-macos/README.md#wezterm-で-skk-モードの-ctrlj-が効かない) を参照
 
 ## ライセンス
 

@@ -111,7 +111,7 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
     }
 
     /// Called for preserved keys (e.g., Hankaku/Zenkaku toggle).
-    fn OnPreservedKey(&self, _pic: Option<&ITfContext>, rguid: *const GUID) -> Result<BOOL> {
+    fn OnPreservedKey(&self, pic: Option<&ITfContext>, rguid: *const GUID) -> Result<BOOL> {
         unsafe {
             if rguid.is_null() {
                 return Ok(FALSE);

@@ -1,5 +1,6 @@
 use super::*;
 use crate::config::settings::KeybindingProfile;
+use crate::core::candidate::{Candidate, CandidateList};
 
 fn make_skk_engine() -> InputMethodEngine {
     let config = EngineConfig {
@@ -7,6 +8,27 @@ fn make_skk_engine() -> InputMethodEngine {
         ..EngineConfig::default()
     };
     InputMethodEngine::with_config(config)
+}
+
+/// Set engine to Conversion state with given reading and candidates
+fn set_conversion_state(engine: &mut InputMethodEngine, reading: &str, candidates: &[&str]) {
+    engine.input_buf.text = reading.to_string();
+    engine.input_buf.cursor_pos = reading.chars().count();
+    let candidate_list = CandidateList::new(
+        candidates
+            .iter()
+            .enumerate()
+            .map(|(i, &text)| Candidate::with_reading(text, reading).with_index(i))
+            .collect(),
+    );
+    engine.state = InputState::Conversion {
+        preedit: Preedit::with_text(candidates[0]),
+        candidates: candidate_list,
+    };
+}
+
+fn has_action(result: &EngineResult, check: impl Fn(&EngineAction) -> bool) -> bool {
+    result.actions.iter().any(|a| check(a))
 }
 
 #[test]
@@ -232,4 +254,375 @@ fn test_skk_ctrl_q_in_empty_switches_mode() {
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
     assert!(matches!(engine.state(), InputState::Empty));
+}
+
+// --- Zenkaku/Hankaku, HENKAN, MUHENKAN tests ---
+
+#[test]
+fn test_skk_zenkaku_hankaku_hiragana_to_alphabet() {
+    let mut engine = make_skk_engine();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+}
+
+#[test]
+fn test_skk_zenkaku_hankaku_alphabet_to_hiragana() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Alphabet;
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_zenkaku_hankaku_composing_commits_and_toggles() {
+    let mut engine = make_skk_engine();
+
+    // Type "a" to enter composing state with "あ"
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    // Zenkaku/Hankaku should commit composing text and switch to alphabet
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "あ"))
+    );
+}
+
+#[test]
+fn test_skk_muhenkan_switches_to_alphabet() {
+    let mut engine = make_skk_engine();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    let result = engine.process_key(&press_key(Keysym::MUHENKAN));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+}
+
+#[test]
+fn test_skk_henkan_switches_to_hiragana() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Katakana;
+
+    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_henkan_from_alphabet() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Alphabet;
+
+    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+// --- HideCandidates tests for mode switching ---
+
+#[test]
+fn test_skk_l_in_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_l_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_q_in_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    let result = engine.process_key(&press('q'));
+    assert!(result.consumed);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_q_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press('q'));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_ctrl_q_in_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_ctrl_q_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+    assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
+}
+
+#[test]
+fn test_skk_ctrl_j_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Katakana;
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_zenkaku_hankaku_in_conversion_commits_and_hides() {
+    let mut engine = make_skk_engine();
+    set_conversion_state(&mut engine, "きょう", &["今日", "京", "恭"]);
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::Commit(t) if t == "今日"
+    )));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+}
+
+// --- HideCandidates tests for commit_composing and Empty state mode switches ---
+
+#[test]
+fn test_commit_composing_hides_candidates() {
+    let mut engine = make_skk_engine();
+
+    // Type "a" to enter composing state with "あ"
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    // Press Enter to commit — should emit HideCandidates
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_l_in_empty_hides_candidates() {
+    let mut engine = make_skk_engine();
+    assert!(matches!(engine.state(), InputState::Empty));
+
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_q_in_empty_hides_candidates() {
+    let mut engine = make_skk_engine();
+    assert!(matches!(engine.state(), InputState::Empty));
+
+    let result = engine.process_key(&press('q'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Katakana);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_ctrl_q_in_empty_hides_candidates() {
+    let mut engine = make_skk_engine();
+    assert!(matches!(engine.state(), InputState::Empty));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::HalfWidthKatakana);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_ctrl_j_in_empty_from_katakana_hides_candidates() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Katakana;
+    assert!(matches!(engine.state(), InputState::Empty));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+#[test]
+fn test_skk_ctrl_j_noop_in_hiragana_hides_candidates() {
+    let mut engine = make_skk_engine();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+    assert!(matches!(engine.state(), InputState::Empty));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+    assert!(has_action(&result, |a| matches!(
+        a,
+        EngineAction::HideCandidates
+    )));
+}
+
+// --- z+hjkl arrow symbol tests ---
+
+#[test]
+fn test_skk_zl_produces_right_arrow() {
+    let mut engine = make_skk_engine();
+    // Type 'z' → enters Composing with romaji buffer "z"
+    engine.process_key(&press('z'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    // Type 'l' → should NOT switch to alphabet mode, should produce "→"
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.text, "→");
+}
+
+#[test]
+fn test_skk_zh_produces_left_arrow() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('z'));
+    let result = engine.process_key(&press('h'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_buf.text, "←");
+}
+
+#[test]
+fn test_skk_zj_produces_down_arrow() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('z'));
+    let result = engine.process_key(&press('j'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_buf.text, "↓");
+}
+
+#[test]
+fn test_skk_zk_produces_up_arrow() {
+    let mut engine = make_skk_engine();
+    engine.process_key(&press('z'));
+    let result = engine.process_key(&press('k'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_buf.text, "↑");
+}
+
+#[test]
+fn test_skk_l_without_pending_romaji_still_switches_alphabet() {
+    // Ensure 'l' alone still works as mode switch
+    let mut engine = make_skk_engine();
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+}
+
+#[test]
+fn test_skk_zl_in_composing_appends_arrow() {
+    let mut engine = make_skk_engine();
+    // Type "a" → "あ" in composing
+    engine.process_key(&press('a'));
+    assert_eq!(engine.input_buf.text, "あ");
+
+    // Type "zl" → should append "→"
+    engine.process_key(&press('z'));
+    engine.process_key(&press('l'));
+    assert_eq!(engine.input_buf.text, "あ→");
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
 }

@@ -78,6 +78,7 @@ impl Keysym {
     // Japanese IME keys
     pub const MUHENKAN: Keysym = Keysym(0xff22); // 無変換
     pub const HENKAN: Keysym = Keysym(0xff23); // 変換
+    pub const ZENKAKU_HANKAKU: Keysym = Keysym(0xff2a); // 全角/半角
 
     // Function keys
     pub const F1: Keysym = Keysym(0xffbe);

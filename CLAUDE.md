@@ -157,7 +157,7 @@ cargo clippy --workspace  # Lint all crates
 - `engine_bridge.rs` — EngineBridge wrapper (same pattern as karukan-tsf)
 - `keymap.rs` — macOS Carbon key code → Keysym mapping
 - `ffi.rs` — C FFI for Swift IMKit integration
-- `swift/KarukanInputMethod/` — Swift IMKit app (IMKInputController, candidate window, settings)
+- `swift/KarukanInputMethod/` — Swift IMKit app (IMKInputController, IMKCandidates, settings)
 - `include/karukan_macos.h` — C FFI header
 - `scripts/` — Build and install scripts
 
@@ -198,3 +198,10 @@ cargo clippy --workspace  # Lint all crates
 ## Training (karukan-jinen)
 
 Model training is handled by the separate `karukan-jinen` Python project (not in this repository). It trains GPT-2 based models for kana-kanji conversion using the jinen format, and outputs GGUF files for use with karukan-engine.
+
+## Documenting Known Issues
+
+When a platform-specific known issue or workaround is identified:
+
+1. Add the issue and workaround to the corresponding platform README's「既知の問題と回避策」section (e.g., `karukan-macos/README.md`, `karukan-tsf/README.md`, `karukan-im/README.md`). Create the section if it doesn't exist.
+2. Add a one-line pointer in the root `README.md`'s「既知の問題」section linking to the platform README's specific heading.

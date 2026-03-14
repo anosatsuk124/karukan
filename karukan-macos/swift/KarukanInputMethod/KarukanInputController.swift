@@ -1,23 +1,44 @@
 import Cocoa
 import InputMethodKit
 
+// MARK: - Debug Logging
+
+#if DEBUG
+private func debugLog(_ message: String) {
+    let logDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/Karukan")
+    try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+    let logFile = logDir.appendingPathComponent("debug.log")
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(timestamp)] \(message)\n"
+    if let handle = try? FileHandle(forWritingTo: logFile) {
+        handle.seekToEndOfFile()
+        handle.write(line.data(using: .utf8)!)
+        handle.closeFile()
+    } else {
+        try? line.write(to: logFile, atomically: true, encoding: .utf8)
+    }
+}
+#endif
+
 /// Main input controller for the Karukan input method.
 /// Each client application gets its own instance of this controller.
+@objc(KarukanInputController)
 class KarukanInputController: IMKInputController {
     private var engine: OpaquePointer?
-    private var candidateWindow: KarukanCandidateWindow?
-    private var initializeTask: Task<Void, Never>?
+    private var imkCandidates: IMKCandidates?
+    private var currentCandidates: [(String, String)] = []
+    private var currentCandidateCursor: Int = 0
 
     // MARK: - Lifecycle
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
         engine = karukan_macos_engine_new()
-        candidateWindow = KarukanCandidateWindow()
+        imkCandidates = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
     }
 
     deinit {
-        initializeTask?.cancel()
         if let engine = engine {
             karukan_macos_engine_free(engine)
         }
@@ -25,13 +46,10 @@ class KarukanInputController: IMKInputController {
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
-        // Initialize engine in background to avoid blocking the main thread
         if let engine = engine {
-            initializeTask = Task.detached(priority: .userInitiated) {
-                let result = karukan_macos_engine_init(engine)
-                if result != 0 {
-                    NSLog("Karukan: Engine initialization failed")
-                }
+            let result = karukan_macos_engine_init(engine)
+            if result != 0 {
+                NSLog("Karukan: Engine initialization failed")
             }
         }
     }
@@ -47,7 +65,7 @@ class KarukanInputController: IMKInputController {
             }
             karukan_macos_save_learning(engine)
         }
-        candidateWindow?.hide()
+        imkCandidates?.hide()
         super.deactivateServer(sender)
     }
 
@@ -101,6 +119,19 @@ class KarukanInputController: IMKInputController {
         return consumed != 0
     }
 
+    // MARK: - IMKCandidates Delegate
+
+    override func candidates(_ sender: Any!) -> [Any]! {
+        return currentCandidates.map { text, annotation in
+            annotation.isEmpty ? text : "\(text)  \(annotation)"
+        }
+    }
+
+    override func candidateSelected(_ candidateString: NSAttributedString!) {
+        guard let text = candidateString?.string, let client = self.client() else { return }
+        client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
     // MARK: - Engine Result Processing
 
     private func processEngineResult(client: any IMKTextInput) {
@@ -144,27 +175,17 @@ class KarukanInputController: IMKInputController {
         // Handle candidates
         if karukan_macos_has_candidates(engine) != 0 {
             if karukan_macos_should_hide_candidates(engine) != 0 {
-                candidateWindow?.hide()
+                imkCandidates?.hide()
             } else {
                 let count = Int(karukan_macos_get_candidate_count(engine))
-                let cursor = Int(karukan_macos_get_candidate_cursor(engine))
-                var candidates: [(String, String)] = []
-                for i in 0..<count {
+                currentCandidateCursor = Int(karukan_macos_get_candidate_cursor(engine))
+                currentCandidates = (0..<count).map { i in
                     let text = getString(karukan_macos_get_candidate(engine, UInt32(i)))
                     let annotation = getString(karukan_macos_get_candidate_annotation(engine, UInt32(i)))
-                    candidates.append((text, annotation))
+                    return (text, annotation)
                 }
-
-                // Get cursor position for candidate window placement
-                var lineRect = NSRect.zero
-                let cursorIndex = client.selectedRange().location
-                client.attributes(forCharacterIndex: cursorIndex, lineHeightRectangle: &lineRect)
-
-                candidateWindow?.show(
-                    candidates: candidates,
-                    cursor: cursor,
-                    nearRect: lineRect
-                )
+                imkCandidates?.update()
+                imkCandidates?.show(kIMKLocateCandidatesBelowHint)
             }
         }
     }
